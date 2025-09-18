@@ -1,0 +1,284 @@
+
+> my-v0-project@0.1.0 dev
+> next dev
+
+   ▲ Next.js 15.2.4
+   - Local:        http://localhost:3000
+   - Network:      http://10.53.38.148:3000
+   - Environments: .env
+
+ ✓ Starting...
+ ✓ Ready in 2.7s
+ ○ Compiling /chat ...
+ ✓ Compiled /chat in 8.2s (2086 modules)
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ HEAD /chat 200 in 9399ms
+ ✓ Compiled in 1794ms (2086 modules)
+ ✓ Compiled in 1351ms (2086 modules)
+ ✓ Compiled in 533ms (2086 modules)
+ ○ Compiling /dashboard ...
+ ✓ Compiled /dashboard in 3.2s (2083 modules)
+ ✓ Compiled /chat in 312ms (1130 modules)
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /dashboard 200 in 6214ms
+ GET /chat 200 in 3173ms
+ ○ Compiling /_not-found ...
+ GET /dashboard 200 in 133ms
+ GET /dashboard 200 in 376ms
+ ✓ Compiled /_not-found in 5.8s (2119 modules)
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 6972ms
+ GET /dashboard 200 in 362ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 121ms
+ ○ Compiling /match ...
+ ✓ Compiled /match in 1798ms (2132 modules)
+ GET /match 200 in 2040ms
+ GET /match 200 in 57ms
+ GET /chat 200 in 24ms
+ GET /chat 200 in 18ms
+ GET /chat 200 in 16ms
+ GET /chat 200 in 15ms
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /dashboard 200 in 210ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 56ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 321ms
+ ✓ Compiled in 5.7s (2142 modules)
+ GET /chat 200 in 350ms
+ GET /dashboard 200 in 360ms
+ ✓ Compiled in 2.9s (2142 modules)
+ GET /chat 200 in 219ms
+ GET /dashboard 200 in 217ms
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /chat 200 in 365ms
+ GET /dashboard 200 in 19ms
+ GET /match 200 in 67ms
+ GET /match 200 in 33ms
+ GET /chat 200 in 19ms
+ GET /chat 200 in 22ms
+ GET /chat 200 in 33ms
+ GET /chat 200 in 16ms
+ GET /dashboard 200 in 121ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 961ms (2132 modules)
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 1334ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 419ms
+ ✓ Compiled in 2.2s (2142 modules)
+ GET /chat 200 in 303ms
+ GET /dashboard 200 in 315ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /dashboard 200 in 1161ms
+ ○ Compiling /_not-found ...
+ GET /chat 200 in 800ms
+ ✓ Compiled /_not-found in 2.9s (2132 modules)
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 3455ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 2602ms
+ GET /dashboard 200 in 82ms
+ GET /dashboard 200 in 135ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 71ms
+ GET /match 200 in 205ms
+ GET /match 200 in 34ms
+ GET /chat 200 in 47ms
+ GET /chat 200 in 20ms
+ GET /chat 200 in 13ms
+ GET /chat 200 in 13ms
+ GET /dashboard 200 in 86ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 72ms
+ ✓ Compiled in 4.4s (2142 modules)
+ ✓ Compiled in 2ms (1138 modules)
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /dashboard 200 in 3280ms
+ GET /dashboard 200 in 4541ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 2.5s (2132 modules)
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 3532ms
+ GET /chat 200 in 7339ms
+ GET /chat 200 in 5711ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 109ms
+ ○ Compiling / ...
+ ✓ Compiled / in 2.5s (2143 modules)
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ GET / 200 in 3003ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 148ms
+ GET /dashboard 200 in 46ms
+ GET /match 200 in 65ms
+ GET /match 200 in 57ms
+ GET /chat 200 in 86ms
+ GET /chat 200 in 280ms
+ GET /chat 200 in 143ms
+ GET /chat 200 in 62ms
+ GET /dashboard 200 in 74ms
+ GET /dashboard 200 in 29ms
+ ✓ Compiled in 2.5s (2146 modules)
+ GET /dashboard 200 in 280ms
+ GET /dashboard 200 in 282ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /dashboard 200 in 1127ms
+ GET /dashboard 200 in 1211ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 1488ms (2136 modules)
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 1910ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 1934ms
+ ✓ Compiled in 3.3s (2146 modules)
+ GET /dashboard 200 in 332ms
+ GET /dashboard 200 in 342ms
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /dashboard 200 in 700ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 1322ms (2136 modules)
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 1746ms
+ GET /dashboard 200 in 179ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 88ms
+ GET /match 200 in 55ms
+ GET /chat 200 in 124ms
+ GET /chat 200 in 62ms
+ GET /chat 200 in 67ms
+ GET /match 200 in 108ms
+ GET /chat 200 in 10ms
+ GET /chat 200 in 24ms
+ GET /chat 200 in 23ms
+ GET /chat 200 in 26ms
+ GET /chat 200 in 9ms
+ GET /dashboard 200 in 35ms
+ ✓ Compiled in 4.5s (2146 modules)
+ GET /dashboard 200 in 1959ms
+ GET /dashboard 200 in 778ms
+ GET /dashboard 200 in 82ms
+ GET /match 200 in 62ms
+ GET /chat 200 in 89ms
+ GET /chat 200 in 24ms
+ GET /chat 200 in 84ms
+ GET /match 200 in 100ms
+ GET /chat 200 in 26ms
+ GET /chat 200 in 31ms
+ GET /chat 200 in 17ms
+ GET /dashboard 200 in 84ms
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /dashboard 200 in 601ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 882ms (2136 modules)
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 1246ms
+ GET /dashboard 200 in 216ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 247ms
+ GET /match 200 in 37ms
+ GET /match 200 in 30ms
+ GET /chat 200 in 32ms
+ GET /chat 200 in 34ms
+ GET /chat 200 in 147ms
+ GET /chat 200 in 178ms
+ ✓ Compiled in 1079ms (2146 modules)
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ GET /chat 200 in 372ms
+ GET /chat 200 in 376ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /chat 200 in 429ms
+ ✓ Compiled /_not-found in 402ms (2136 modules)
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 513ms
+ GET /chat 200 in 236ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 103ms
+ ✓ Compiled in 664ms (2150 modules)
+ GET /chat 200 in 61ms
+ GET /chat 200 in 64ms
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ GET /chat 200 in 699ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 68ms
+ GET /chat 200 in 265ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 56ms
+ ✓ Compiled / in 392ms (1146 modules)
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET / 200 in 543ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 52ms
+ GET /dashboard 200 in 39ms
+ GET /match 200 in 61ms
+ ✓ Compiled in 1010ms (2157 modules)
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ ⚠ Fast Refresh had to perform a full reload. Read more: https://nextjs.org/docs/messages/fast-refresh-reload
+ GET /match 200 in 328ms
+ GET /chat 200 in 336ms
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 125ms
+ GET /match 200 in 733ms
+ GET /chat 200 in 628ms
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 104ms
+ GET /chat 200 in 56ms
+ GET /chat 200 in 106ms
+ GET /chat 200 in 118ms
+ ✓ Compiled in 4.9s (2157 modules)
+ GET /chat 200 in 100ms
+ GET /chat 200 in 102ms
+ GET /dashboard 200 in 52ms
+ GET /match 200 in 36ms
+ GET /chat 200 in 53ms
+ GET /chat 200 in 18ms
+ ✓ Compiled in 1494ms (2157 modules)
+ GET /chat 200 in 464ms
+ GET /chat 200 in 474ms
+ ✓ Compiled in 1690ms (2157 modules)
+ GET /chat 200 in 43ms
+ GET /chat 200 in 43ms
+ ✓ Compiled in 825ms (2146 modules)
+ GET /chat 200 in 90ms
+ GET /chat 200 in 95ms
+ ✓ Compiled in 470ms (2146 modules)
+ GET /chat 200 in 98ms
+ GET /chat 200 in 101ms
+ ✓ Compiled in 435ms (1008 modules)
+ GET /chat 200 in 79ms
+ GET /chat 200 in 75ms
+ ✓ Compiled in 436ms (2146 modules)
+ GET /chat 200 in 53ms
+ GET /chat 200 in 53ms
+ ✓ Compiled in 1011ms (2168 modules)
+ GET /chat 200 in 94ms
+ GET /chat 200 in 95ms
+ GET /dashboard 200 in 64ms
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /dashboard 200 in 286ms
+ ○ Compiling /_not-found ...
+ ✓ Compiled /_not-found in 730ms (2158 modules)
+Socket URL: http://localhost:3335
+Environment SOCKET_URL: http://localhost:3335
+ GET /.well-known/appspecific/com.chrome.devtools.json 404 in 911ms
+ GET /match 200 in 15ms
+ GET /match 200 in 20ms
+ GET /chat 200 in 16ms
+ GET /chat 200 in 10ms
+ GET /chat 200 in 6ms
+ GET /chat 200 in 7ms
