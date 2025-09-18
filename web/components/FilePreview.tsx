@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Download,
@@ -45,6 +45,9 @@ const FilePreview: React.FC<FilePreviewProps> = ({
   const [imageError, setImageError] = useState(false);
   const [zoom, setZoom] = useState(1);
 
+  useEffect(() => {
+    setImageError(false);
+  }, [tempUrl]);
   const getFileIcon = () => {
     switch (fileTypeCategory) {
       case "image":
@@ -59,6 +62,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
         return <File className="w-6 h-6" />;
     }
   };
+  // Add this useEffect in FilePreview component
 
   const formatFileSize = (bytes?: number) => {
     if (!bytes) return "Unknown size";
@@ -68,27 +72,27 @@ const FilePreview: React.FC<FilePreviewProps> = ({
   };
 
   const getFileExtension = (filename: string) => {
-    return filename.split('.').pop()?.toUpperCase() || '';
+    return filename.split(".").pop()?.toUpperCase() || "";
   };
 
   const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
       // Check if file is still available
-      const response = await fetch(downloadUrl, { method: 'HEAD' });
+      const response = await fetch(downloadUrl, { method: "HEAD" });
       if (response.ok) {
         // Create a temporary anchor to trigger download
-        const link = document.createElement('a');
+        const link = document.createElement("a");
         link.href = downloadUrl;
         link.download = filename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
       } else {
-        throw new Error('File not available');
+        throw new Error("File not available");
       }
     } catch (error) {
-      alert('File has expired or is no longer available');
+      alert("File has expired or is no longer available");
     }
   };
 
@@ -100,18 +104,38 @@ const FilePreview: React.FC<FilePreviewProps> = ({
 
   // Image preview component
   const ImagePreview = () => {
-    if (!isImage || imageError) return null;
+    console.log(
+      "ImagePreview - isImage:",
+      isImage,
+      "imageError:",
+      imageError,
+      "tempUrl:",
+      tempUrl
+    );
+
+    if (!isImage || imageError) {
+      console.log(
+        "ImagePreview returning null - isImage:",
+        isImage,
+        "imageError:",
+        imageError
+      );
+      return null;
+    }
 
     return (
-      <div 
-        className="relative group cursor-pointer"
-        onClick={handleImageClick}
-      >
+      <div className="relative group cursor-pointer" onClick={handleImageClick}>
         <img
           src={tempUrl}
           alt={filename}
           className="rounded-lg max-w-full h-auto max-h-64 object-cover transition-opacity group-hover:opacity-90"
-          onError={() => setImageError(true)}
+          onError={(e) => {
+            console.error("Image failed to load:", tempUrl, e);
+            setImageError(true);
+          }}
+          onLoad={() => {
+            console.log("Image loaded successfully:", tempUrl);
+          }}
           loading="lazy"
         />
         {/* Overlay with zoom icon on hover */}
@@ -128,7 +152,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
 
   // PDF preview component
   const PDFPreview = () => {
-    if (fileTypeCategory !== 'pdf') return null;
+    if (fileTypeCategory !== "pdf") return null;
 
     return (
       <div className="bg-red-50 border border-red-200 rounded-lg p-4 cursor-pointer hover:bg-red-100 transition-colors">
@@ -137,7 +161,9 @@ const FilePreview: React.FC<FilePreviewProps> = ({
             <FileText className="w-6 h-6 text-white" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm text-gray-900 truncate">{filename}</p>
+            <p className="font-medium text-sm text-gray-900 truncate">
+              {filename}
+            </p>
             <p className="text-xs text-gray-600">{formatFileSize(fileSize)}</p>
           </div>
           <Button size="sm" variant="outline" onClick={handleDownload}>
@@ -150,7 +176,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
 
   // Video preview component
   const VideoPreview = () => {
-    if (fileTypeCategory !== 'video') return null;
+    if (fileTypeCategory !== "video") return null;
 
     return (
       <div className="relative">
@@ -172,7 +198,8 @@ const FilePreview: React.FC<FilePreviewProps> = ({
 
   // Generic file preview component
   const GenericFilePreview = () => {
-    if (isImage || fileTypeCategory === 'pdf' || fileTypeCategory === 'video') return null;
+    if (isImage || fileTypeCategory === "pdf" || fileTypeCategory === "video")
+      return null;
 
     return (
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 hover:bg-gray-100 transition-colors">
@@ -184,7 +211,9 @@ const FilePreview: React.FC<FilePreviewProps> = ({
             </span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm text-gray-900 truncate">{filename}</p>
+            <p className="font-medium text-sm text-gray-900 truncate">
+              {filename}
+            </p>
             <p className="text-xs text-gray-600">{formatFileSize(fileSize)}</p>
             {expiresAt && (
               <p className="text-xs text-orange-600">
@@ -209,7 +238,9 @@ const FilePreview: React.FC<FilePreviewProps> = ({
           <div className="absolute top-0 left-0 right-0 z-10 bg-black bg-opacity-75 text-white p-4 flex items-center justify-between">
             <div>
               <h3 className="font-medium truncate">{filename}</h3>
-              <p className="text-sm text-gray-300">{formatFileSize(fileSize)}</p>
+              <p className="text-sm text-gray-300">
+                {formatFileSize(fileSize)}
+              </p>
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -239,7 +270,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => window.open(tempUrl, '_blank')}
+                onClick={() => window.open(tempUrl, "_blank")}
                 className="text-white hover:bg-white hover:bg-opacity-20"
               >
                 <ExternalLink className="w-4 h-4" />
@@ -268,7 +299,7 @@ const FilePreview: React.FC<FilePreviewProps> = ({
               onError={() => {
                 setImageError(true);
                 setIsModalOpen(false);
-                alert('Image has expired or is no longer available');
+                alert("Image has expired or is no longer available");
               }}
             />
           </div>
@@ -279,6 +310,10 @@ const FilePreview: React.FC<FilePreviewProps> = ({
 
   return (
     <div className={`file-preview ${className}`}>
+      {/* <div style={{ fontSize: "10px", color: "red", marginBottom: "5px" }}>
+        Debug: isImage={String(isImage)}, imageError={String(imageError)},
+        fileTypeCategory={fileTypeCategory}
+      </div> */}
       <ImagePreview />
       <VideoPreview />
       <PDFPreview />

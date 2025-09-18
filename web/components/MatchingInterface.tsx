@@ -1,67 +1,92 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { UserPlus, Users, Globe, MapPin, Clock, Shuffle, X, MessageCircle } from "lucide-react"
-import { motion, AnimatePresence } from "framer-motion"
-import { useChat } from "@/contexts/ChatContext"
-import { useAuth } from "@/contexts/AuthContext"
+import { useState, useEffect } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  UserPlus,
+  Users,
+  Globe,
+  MapPin,
+  Clock,
+  Shuffle,
+  X,
+  MessageCircle,
+} from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useChat } from "@/contexts/ChatContext";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface MatchingInterfaceProps {
-  onMatchFound: () => void
+  onMatchFound: () => void;
 }
 
-export default function MatchingInterface({ onMatchFound }: MatchingInterfaceProps) {
-  const { user } = useAuth()
-  const { isMatching, connectedUser, requestMatch, cancelMatch } = useChat()
-  const [matchingStage, setMatchingStage] = useState<"idle" | "searching" | "found" | "failed">("idle")
-  const [searchDuration, setSearchDuration] = useState(0)
-  const [showMatchDialog, setShowMatchDialog] = useState(false)
+export default function MatchingInterface({
+  onMatchFound,
+}: MatchingInterfaceProps) {
+  const { user } = useAuth();
+  const { isMatching, connectedUser, requestMatch, cancelMatch } = useChat();
+  const [matchingStage, setMatchingStage] = useState<
+    "idle" | "searching" | "found" | "failed"
+  >("idle");
+  const [searchDuration, setSearchDuration] = useState(0);
+  const [showMatchDialog, setShowMatchDialog] = useState(false);
 
   useEffect(() => {
     if (isMatching) {
-      setMatchingStage("searching")
-      setShowMatchDialog(true)
-      setSearchDuration(0)
+      setMatchingStage("searching");
+      setShowMatchDialog(true);
+      setSearchDuration(0);
     } else if (connectedUser) {
-      setMatchingStage("found")
+      setMatchingStage("found");
       setTimeout(() => {
-        setShowMatchDialog(false)
-        onMatchFound()
-      }, 2000)
+        setShowMatchDialog(false);
+        onMatchFound();
+      }, 2000);
     } else if (matchingStage === "searching") {
-      setMatchingStage("failed")
+      setMatchingStage("failed");
       setTimeout(() => {
-        setShowMatchDialog(false)
-        setMatchingStage("idle")
-      }, 3000)
+        setShowMatchDialog(false);
+        setMatchingStage("idle");
+      }, 3000);
     }
-  }, [isMatching, connectedUser, matchingStage, onMatchFound])
+  }, [isMatching, connectedUser, matchingStage, onMatchFound]);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout
+    let interval: NodeJS.Timeout;
     if (matchingStage === "searching") {
       interval = setInterval(() => {
-        setSearchDuration((prev) => prev + 1)
-      }, 1000)
+        setSearchDuration((prev) => prev + 1);
+      }, 1000);
     }
-    return () => clearInterval(interval)
-  }, [matchingStage])
+    return () => clearInterval(interval);
+  }, [matchingStage]);
 
   const handleStartMatching = () => {
-    requestMatch()
-  }
+    requestMatch();
+  };
 
   const handleCancelMatching = () => {
-    cancelMatch()
-    setMatchingStage("idle")
-    setShowMatchDialog(false)
-    setSearchDuration(0)
-  }
+    cancelMatch();
+    setMatchingStage("idle");
+    setShowMatchDialog(false);
+    setSearchDuration(0);
+  };
 
   const getInitials = (name: string) => {
     return name
@@ -69,14 +94,14 @@ export default function MatchingInterface({ onMatchFound }: MatchingInterfacePro
       .map((n) => n[0])
       .join("")
       .toUpperCase()
-      .slice(0, 2)
-  }
+      .slice(0, 2);
+  };
 
   const formatDuration = (seconds: number) => {
-    const mins = Math.floor(seconds / 60)
-    const secs = seconds % 60
-    return `${mins}:${secs.toString().padStart(2, "0")}`
-  }
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
 
   return (
     <>
@@ -91,10 +116,12 @@ export default function MatchingInterface({ onMatchFound }: MatchingInterfacePro
           <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6">
             <Users className="w-10 h-10 text-white" />
           </div>
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Find Your Next Chat Partner</h2>
+          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+            Find Your Next Chat Partner
+          </h2>
           <p className="text-lg text-gray-600 dark:text-gray-400 mb-8 text-pretty">
-            Connect with interesting people from around the world. Start a conversation, make new friends, or just have
-            fun chatting!
+            Connect with interesting people from around the world. Start a
+            conversation, make new friends, or just have fun chatting!
           </p>
         </motion.div>
 
@@ -111,10 +138,17 @@ export default function MatchingInterface({ onMatchFound }: MatchingInterfacePro
                 <Shuffle className="w-5 h-5 text-blue-600" />
                 Random Match
               </CardTitle>
-              <CardDescription>Connect with a random person instantly</CardDescription>
+              <CardDescription>
+                Connect with a random person instantly
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button onClick={handleStartMatching} disabled={isMatching} className="w-full" size="lg">
+              <Button
+                onClick={handleStartMatching}
+                disabled={isMatching}
+                className="w-full"
+                size="lg"
+              >
                 {isMatching ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
@@ -136,10 +170,17 @@ export default function MatchingInterface({ onMatchFound }: MatchingInterfacePro
                 <Globe className="w-5 h-5 text-green-600" />
                 Global Chat
               </CardTitle>
-              <CardDescription>Join conversations from around the world</CardDescription>
+              <CardDescription>
+                Join conversations from around the world
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline" className="w-full bg-transparent" size="lg" disabled>
+              <Button
+                variant="outline"
+                className="w-full bg-transparent"
+                size="lg"
+                disabled
+              >
                 <Globe className="w-4 h-4 mr-2" />
                 Coming Soon
               </Button>
@@ -160,7 +201,9 @@ export default function MatchingInterface({ onMatchFound }: MatchingInterfacePro
                   <Users className="w-5 h-5" />
                   Your Profile
                 </CardTitle>
-                <CardDescription>This is how others will see you</CardDescription>
+                <CardDescription>
+                  This is how others will see you
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center gap-4">
@@ -170,13 +213,18 @@ export default function MatchingInterface({ onMatchFound }: MatchingInterfacePro
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">{user.username}</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                      {user.username}
+                    </h3>
                     <div className="flex items-center gap-2 mt-1">
                       <Badge variant={user.isOnline ? "default" : "secondary"}>
                         {user.isOnline ? "Online" : "Offline"}
                       </Badge>
                       {user.location && (
-                        <Badge variant="outline" className="flex items-center gap-1">
+                        <Badge
+                          variant="outline"
+                          className="flex items-center gap-1"
+                        >
                           <MapPin className="w-3 h-3" />
                           {user.location.city}, {user.location.country}
                         </Badge>
@@ -184,7 +232,9 @@ export default function MatchingInterface({ onMatchFound }: MatchingInterfacePro
                     </div>
                     <div className="flex items-center gap-2 mt-2 text-sm text-gray-600 dark:text-gray-400">
                       <Clock className="w-3 h-3" />
-                      <span>Joined {new Date(user.createdAt).toLocaleDateString()}</span>
+                      <span>
+                        Joined {new Date(user.createdAt).toLocaleDateString()}
+                      </span>
                     </div>
                   </div>
                 </div>
@@ -201,10 +251,23 @@ export default function MatchingInterface({ onMatchFound }: MatchingInterfacePro
             <DialogTitle className="flex items-center gap-2">
               {matchingStage === "searching" && (
                 <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-600"></div>
-                  Finding Your Match
+                  <motion.div
+                    animate={{ scale: [1, 1.2, 1] }}
+                    transition={{
+                      repeat: Infinity,
+                      duration: 1.2,
+                      ease: "easeInOut",
+                    }}
+                    className="flex items-center justify-center"
+                  >
+                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent mr-2" />
+                  </motion.div>
+                  <span className="font-medium text-blue-600">
+                    Looking for your perfect match...
+                  </span>
                 </>
               )}
+
               {matchingStage === "found" && (
                 <>
                   <MessageCircle className="w-5 h-5 text-green-600" />
@@ -221,7 +284,8 @@ export default function MatchingInterface({ onMatchFound }: MatchingInterfacePro
             <DialogDescription>
               {matchingStage === "searching" &&
                 "We're searching for the perfect chat partner for you. This might take a moment..."}
-              {matchingStage === "found" && "Great! We found someone for you to chat with. Starting conversation..."}
+              {matchingStage === "found" &&
+                "Great! We found someone for you to chat with. Starting conversation..."}
               {matchingStage === "failed" &&
                 "Sorry, no users are available right now. Please try again in a few moments."}
             </DialogDescription>
@@ -238,18 +302,49 @@ export default function MatchingInterface({ onMatchFound }: MatchingInterfacePro
                   className="text-center"
                 >
                   <div className="relative mb-6">
-                    <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
-                      <Users className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+                    {/* User Icon */}
+                    <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center relative z-10">
+                      <Users className="w-7 h-7 text-blue-600 dark:text-blue-400" />
                     </div>
+
+                    {/* Outer pulsing ring */}
                     <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ duration: 2, repeat: Number.POSITIVE_INFINITY, ease: "linear" }}
-                      className="absolute inset-0 border-2 border-blue-600 border-t-transparent rounded-full"
+                      initial={{ scale: 1, opacity: 0.6 }}
+                      animate={{ scale: [1, 1.4, 1], opacity: [0.6, 0, 0.6] }}
+                      transition={{
+                        duration: 2,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                      }}
+                      className="absolute inset-0 rounded-full border-2 border-blue-400"
+                    />
+
+                    {/* Second ripple for depth */}
+                    <motion.div
+                      initial={{ scale: 1, opacity: 0.4 }}
+                      animate={{ scale: [1, 1.8, 1], opacity: [0.4, 0, 0.4] }}
+                      transition={{
+                        duration: 3,
+                        repeat: Infinity,
+                        ease: "easeInOut",
+                        delay: 0.5,
+                      }}
+                      className="absolute inset-0 rounded-full border border-blue-300"
                     />
                   </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">Searching for available users...</p>
-                  <p className="text-xs text-gray-500">Duration: {formatDuration(searchDuration)}</p>
-                  <Button variant="outline" size="sm" onClick={handleCancelMatching} className="mt-4 bg-transparent">
+
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                    Searching for available users...
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Duration: {formatDuration(searchDuration)}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCancelMatching}
+                    className="mt-4 bg-transparent"
+                  >
                     Cancel Search
                   </Button>
                 </motion.div>
@@ -276,11 +371,14 @@ export default function MatchingInterface({ onMatchFound }: MatchingInterfacePro
                       {getInitials(connectedUser.username)}
                     </AvatarFallback>
                   </Avatar>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-1">{connectedUser.username}</h3>
+                  <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
+                    {connectedUser.username}
+                  </h3>
                   {connectedUser.location && (
                     <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center justify-center gap-1">
                       <MapPin className="w-3 h-3" />
-                      {connectedUser.location.city}, {connectedUser.location.country}
+                      {connectedUser.location.city},{" "}
+                      {connectedUser.location.country}
                     </p>
                   )}
                   <motion.div
@@ -316,5 +414,5 @@ export default function MatchingInterface({ onMatchFound }: MatchingInterfacePro
         </DialogContent>
       </Dialog>
     </>
-  )
+  );
 }

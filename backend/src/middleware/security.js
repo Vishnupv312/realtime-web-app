@@ -55,9 +55,13 @@ const uploadLimiter = createRateLimiter(
 );
 
 // CORS configuration
+// Put your LAN IP here
+const DEV_LAN_IP = "192.168.29.177"; // <-- replace with your LAN IP
+
+// CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
-    // In development, allow all origins
+    // In development, allow all origins including LAN IP
     if (process.env.NODE_ENV !== "production") {
       return callback(null, true);
     }
@@ -67,18 +71,15 @@ const corsOptions = {
 
     const allowedOrigins = [
       process.env.CORS_ORIGIN,
-      "http://10.29.202.148:3000",
+      `http://${DEV_LAN_IP}:3000`,
+      `http://${DEV_LAN_IP}:3335`,
       "http://localhost:3000",
       "http://localhost:3001",
+      "http://localhost:3335",
       "http://127.0.0.1:3000",
       "http://127.0.0.1:3001",
+      "http://127.0.0.1:3335",
     ];
-
-    // Add production origins if in production
-    if (process.env.NODE_ENV === "production") {
-      // Add your production domains here
-      // allowedOrigins.push('https://yourdomain.com');
-    }
 
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
@@ -93,22 +94,54 @@ const corsOptions = {
   exposedHeaders: ["X-Total-Count"],
 };
 
-// Helmet configuration for security headers
 const helmetConfig = {
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'"],
+      imgSrc: [
+        "'self'",
+        "data:",
+        "https:",
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3335",
+        `http://${DEV_LAN_IP}:3000`,
+        `http://${DEV_LAN_IP}:3335`,
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3335",
+      ],
+      connectSrc: [
+        "'self'",
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3335",
+        `http://${DEV_LAN_IP}:3000`,
+        `http://${DEV_LAN_IP}:3335`,
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3335",
+      ],
       fontSrc: ["'self'"],
       objectSrc: ["'none'"],
-      mediaSrc: ["'self'"],
+      mediaSrc: [
+        "'self'",
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3335",
+        `http://${DEV_LAN_IP}:3000`,
+        `http://${DEV_LAN_IP}:3335`,
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
+        "http://127.0.0.1:3335",
+      ],
       frameSrc: ["'none'"],
     },
   },
-  crossOriginEmbedderPolicy: false, // Disable for WebRTC compatibility
+  crossOriginEmbedderPolicy: false,
+  crossOriginResourcePolicy: { policy: "cross-origin" },
 };
 
 // Input sanitization middleware
@@ -117,7 +150,7 @@ const sanitizeInput = (req, res, next) => {
   try {
     // Skip sanitization for multipart/form-data requests (file uploads)
     // as multer handles the parsing and mongoSanitize can interfere
-    if (req.is('multipart/form-data')) {
+    if (req.is("multipart/form-data")) {
       // Apply only custom sanitization to body fields
       if (req.body && typeof req.body === "object") {
         req.body = sanitizeObject(req.body);
