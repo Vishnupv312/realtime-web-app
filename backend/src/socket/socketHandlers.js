@@ -603,6 +603,66 @@ function createSocketHandlers(io) {
     }
   }
 
+  // WebRTC Call End Handler
+  async function handleWebRTCCallEnd(socket, data) {
+    try {
+      const userId = socket.userId;
+      const user = await User.findById(userId);
+
+      if (!user || !user.connectedUser) {
+        socket.emit('webrtc:error', { message: 'You are not connected to any user' });
+        return;
+      }
+
+      const connectedUserSocketId = userSockets.get(user.connectedUser.toString());
+
+      if (connectedUserSocketId) {
+        io.to(connectedUserSocketId).emit('webrtc:call-end', {
+          from: userId,
+          fromUsername: user.username
+        });
+
+        logger.info(`WebRTC call ended: ${user.username} -> ${user.connectedUser}`);
+      } else {
+        socket.emit('webrtc:error', { message: 'Connected user is not available' });
+      }
+
+    } catch (error) {
+      logger.error('WebRTC call end error:', error);
+      socket.emit('webrtc:error', { message: 'Failed to end call' });
+    }
+  }
+
+  // WebRTC Call Reject Handler
+  async function handleWebRTCCallReject(socket, data) {
+    try {
+      const userId = socket.userId;
+      const user = await User.findById(userId);
+
+      if (!user || !user.connectedUser) {
+        socket.emit('webrtc:error', { message: 'You are not connected to any user' });
+        return;
+      }
+
+      const connectedUserSocketId = userSockets.get(user.connectedUser.toString());
+
+      if (connectedUserSocketId) {
+        io.to(connectedUserSocketId).emit('webrtc:call-reject', {
+          from: userId,
+          fromUsername: user.username
+        });
+
+        logger.info(`WebRTC call rejected: ${user.username} -> ${user.connectedUser}`);
+      } else {
+        socket.emit('webrtc:error', { message: 'Connected user is not available' });
+      }
+
+    } catch (error) {
+      logger.error('WebRTC call reject error:', error);
+      socket.emit('webrtc:error', { message: 'Failed to reject call' });
+    }
+  }
+
   return {
     handleConnection,
     handleDisconnection,
@@ -613,6 +673,8 @@ function createSocketHandlers(io) {
     handleWebRTCOffer,
     handleWebRTCAnswer,
     handleICECandidate,
+    handleWebRTCCallEnd,
+    handleWebRTCCallReject,
     handleLeaveRoom,
     handleCloseRoom
   };

@@ -87,7 +87,7 @@ export default function ChatPage() {
   } = useWebRTC({
     connectedUser,
     currentUserId: user?.id,
-    addSystemMessage
+    addSystemMessage,
   });
   const router = useRouter();
 
@@ -103,6 +103,23 @@ export default function ChatPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingStartRef = useRef<number | null>(null);
+
+  // Handle dynamic viewport height for mobile browsers (especially iOS Safari)
+  useEffect(() => {
+    const setVH = () => {
+      const vh = window.innerHeight * 0.01;
+      document.documentElement.style.setProperty('--vh', `${vh}px`);
+    };
+    
+    setVH();
+    window.addEventListener('resize', setVH);
+    window.addEventListener('orientationchange', setVH);
+    
+    return () => {
+      window.removeEventListener('resize', setVH);
+      window.removeEventListener('orientationchange', setVH);
+    };
+  }, []);
 
   useEffect(() => {
     scrollToBottom();
@@ -245,7 +262,7 @@ export default function ChatPage() {
           alert("No active chat room");
           return;
         }
-        
+
         const formData = new FormData();
         formData.append("file", audioFile);
         // Calculate duration in seconds (min 1s to satisfy validation)
@@ -254,8 +271,8 @@ export default function ChatPage() {
           Math.ceil(
             recordingStartRef.current
               ? (Date.now() - recordingStartRef.current) / 1000
-              : 1,
-          ),
+              : 1
+          )
         );
         formData.append("duration", String(durationSec));
         // Include metadata required by backend validation
@@ -324,10 +341,14 @@ export default function ChatPage() {
 
   const renderMessage = (message: any, index: number) => {
     // Handle system messages differently (centered)
-    if (message.senderId === "system" || message.type === "system" || message.isSystemMessage) {
+    if (
+      message.senderId === "system" ||
+      message.type === "system" ||
+      message.isSystemMessage
+    ) {
       return (
         <motion.div
-          key={message.id || index}
+          key={index}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
@@ -365,7 +386,7 @@ export default function ChatPage() {
         {!showAvatar && !isOwn && <div className="w-8" />}
 
         <div
-          className={`max-w-xs lg:max-w-md ${
+          className={`max-w-[280px] sm:max-w-xs lg:max-w-md ${
             isOwn ? "items-end" : "items-start"
           } flex flex-col`}
         >
@@ -380,23 +401,24 @@ export default function ChatPage() {
           )}
 
           <div
-            className={`rounded-2xl px-4 py-2 ${
+            className={`rounded-2xl px-3 py-2 sm:px-4 text-sm sm:text-base ${
               isOwn
                 ? "bg-blue-600 text-white rounded-br-md"
                 : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-md"
             }`}
           >
             {message.type === "text" && (
-              <p className="text-sm">{message.content}</p>
+              <p className="break-words">{message.content}</p>
             )}
 
-            {message.type === "file" && (() => {
-              console.log("File message content:", message.content);
-              return true; // Always render file messages for debugging
-            })() && (
-              message.content.tempUrl && message.content.downloadUrl ? (
+            {message.type === "file" &&
+              (() => {
+                console.log("File message content:", message.content);
+                return true; // Always render file messages for debugging
+              })() &&
+              (message.content.tempUrl && message.content.downloadUrl ? (
                 <FilePreview
-                  filename={message.content.filename || 'Unknown file'}
+                  filename={message.content.filename || "Unknown file"}
                   tempUrl={message.content.tempUrl}
                   downloadUrl={message.content.downloadUrl}
                   fileType={message.content.fileType}
@@ -409,59 +431,78 @@ export default function ChatPage() {
               ) : (
                 <div className="p-3 bg-red-100 border border-red-300 rounded">
                   <p className="text-red-700 text-sm">File message (Debug)</p>
-                  <p className="text-xs text-red-600">Filename: {message.content.filename || 'Unknown'}</p>
-                  <p className="text-xs text-red-600">TempURL: {message.content.tempUrl ? 'Present' : 'Missing'}</p>
-                  <p className="text-xs text-red-600">DownloadURL: {message.content.downloadUrl ? 'Present' : 'Missing'}</p>
-                  <pre className="text-xs text-red-600 mt-1">{JSON.stringify(message.content, null, 2)}</pre>
+                  <p className="text-xs text-red-600">
+                    Filename: {message.content.filename || "Unknown"}
+                  </p>
+                  <p className="text-xs text-red-600">
+                    TempURL: {message.content.tempUrl ? "Present" : "Missing"}
+                  </p>
+                  <p className="text-xs text-red-600">
+                    DownloadURL:{" "}
+                    {message.content.downloadUrl ? "Present" : "Missing"}
+                  </p>
+                  <pre className="text-xs text-red-600 mt-1">
+                    {JSON.stringify(message.content, null, 2)}
+                  </pre>
                 </div>
-              )
-            )}
+              ))}
 
             {message.type === "voice" && (
               <div className="space-y-2">
                 {/* Audio player if temp URL is available */}
                 {message.content.tempUrl && (
-                  <audio 
-                    controls 
+                  <audio
+                    controls
                     className="max-w-full"
                     onError={(e) => {
                       // Hide audio player if it fails to load (expired)
-                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.style.display = "none";
                     }}
                   >
-                    <source src={message.content.tempUrl} type={message.content.fileType || 'audio/mpeg'} />
+                    <source
+                      src={message.content.tempUrl}
+                      type={message.content.fileType || "audio/mpeg"}
+                    />
                     Your browser does not support the audio element.
                   </audio>
                 )}
-                
+
                 {/* Voice message info */}
                 <div className="flex items-center gap-2">
                   <Mic className="w-4 h-4" />
                   <div className="flex-1">
                     <p className="text-sm">Voice message</p>
                     <p className="text-xs opacity-75">
-                      {message.content.duration ? `${message.content.duration}s` : 'Duration unknown'}
+                      {message.content.duration
+                        ? `${message.content.duration}s`
+                        : "Duration unknown"}
                       {message.content.expiresAt && (
                         <span className="ml-2">
-                          • Expires {new Date(message.content.expiresAt).toLocaleTimeString()}
+                          • Expires{" "}
+                          {new Date(
+                            message.content.expiresAt
+                          ).toLocaleTimeString()}
                         </span>
                       )}
                     </p>
                   </div>
-                  
+
                   {/* Download button for voice */}
                   {message.content.downloadUrl && (
-                    <a 
+                    <a
                       href={message.content.downloadUrl}
                       download={message.content.filename}
                       className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600"
                       onClick={(e) => {
                         // Check if link is still valid
-                        fetch(message.content.downloadUrl, { method: 'HEAD' })
-                          .catch(() => {
-                            e.preventDefault();
-                            alert('Voice message has expired or is no longer available');
-                          });
+                        fetch(message.content.downloadUrl, {
+                          method: "HEAD",
+                        }).catch(() => {
+                          e.preventDefault();
+                          alert(
+                            "Voice message has expired or is no longer available"
+                          );
+                        });
                       }}
                     >
                       Download
@@ -486,14 +527,15 @@ export default function ChatPage() {
 
   return (
     <ProtectedRoute>
-      <div className="h-screen flex flex-col bg-white dark:bg-gray-900">
+      <div className="mobile-screen flex flex-col bg-white dark:bg-gray-900 overflow-hidden">
         {/* Header */}
-        <header className="border-b bg-white dark:bg-gray-900 px-4 py-3">
+        <header className="border-b bg-white dark:bg-gray-900 px-3 py-2 sm:px-4 sm:py-3 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Button
                 variant="ghost"
                 size="sm"
+                className="h-8 w-8 sm:h-9 sm:w-9 p-0"
                 onClick={() => {
                   leaveRoom?.();
                   router.push("/dashboard");
@@ -541,7 +583,7 @@ export default function ChatPage() {
               )}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
               {connectedUser && (
                 <>
                   <Button
@@ -549,6 +591,7 @@ export default function ChatPage() {
                     size="sm"
                     onClick={handleAudioCall}
                     disabled={isCallActive}
+                    className="h-8 w-8 sm:h-9 sm:w-9 p-0"
                   >
                     <Phone className="w-4 h-4" />
                   </Button>
@@ -557,6 +600,7 @@ export default function ChatPage() {
                     size="sm"
                     onClick={handleVideoCall}
                     disabled={isCallActive}
+                    className="h-8 w-8 sm:h-9 sm:w-9 p-0"
                   >
                     <Video className="w-4 h-4" />
                   </Button>
@@ -565,7 +609,7 @@ export default function ChatPage() {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm">
+                  <Button variant="ghost" size="sm" className="h-8 w-8 sm:h-9 sm:w-9 p-0">
                     <MoreVertical className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -599,23 +643,27 @@ export default function ChatPage() {
         </header>
 
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-2 sm:px-4 sm:py-4 space-y-2 min-h-0">
           {!connectedUser && !isMatching && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="text-center py-12"
+              className="text-center py-8 px-4"
             >
-              <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-4">
-                <UserPlus className="w-8 h-8 text-blue-600 dark:text-blue-400" />
+              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4">
+                <UserPlus className="w-6 h-6 sm:w-8 sm:h-8 text-blue-600 dark:text-blue-400" />
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+              <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-2">
                 Ready to Chat?
               </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">
+              <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-4 sm:mb-6">
                 Find a random person to start chatting with
               </p>
-              <Button onClick={requestMatch} disabled={isMatching}>
+              <Button 
+                onClick={requestMatch} 
+                disabled={isMatching}
+                className="text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3"
+              >
                 <UserPlus className="w-4 h-4 mr-2" />
                 Find Someone to Chat
               </Button>
@@ -656,7 +704,7 @@ export default function ChatPage() {
 
         {/* Input Area */}
         {connectedUser && (
-          <div className="border-t bg-white dark:bg-gray-900 p-4">
+          <div className="border-t bg-white dark:bg-gray-900 px-3 py-2 sm:px-4 sm:py-4 flex-shrink-0">
             {fileUpload && (
               <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                 <div className="flex items-center justify-between">
@@ -675,7 +723,7 @@ export default function ChatPage() {
 
             <form
               onSubmit={handleSendMessage}
-              className="flex items-center gap-2"
+              className="flex items-center gap-1 sm:gap-2"
             >
               <input
                 ref={fileInputRef}

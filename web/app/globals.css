@@ -139,10 +139,45 @@ video {
   object-fit: cover;
 }
 
+/* Mobile viewport fix */
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Mobile-friendly viewport height */
+.mobile-screen {
+  height: 100vh;
+  height: 100dvh; /* Dynamic viewport height for modern browsers */
+}
+
+@supports not (height: 100dvh) {
+  .mobile-screen {
+    height: 100vh;
+  }
+}
+
+/* Fix for iOS Safari address bar */
+@media screen and (max-width: 768px) {
+  .mobile-screen {
+    height: 100vh;
+    height: calc(var(--vh, 1vh) * 100);
+  }
+}
+
 /* Mobile-specific adjustments for video call modal */
 @media (max-width: 640px) {
   .video-call-modal {
     padding: 0;
     margin: 0;
+  }
+}
+
+/* Prevent body scroll on mobile */
+@media (max-width: 768px) {
+  body {
+    position: fixed;
+    width: 100%;
+    height: 100%;
   }
 }

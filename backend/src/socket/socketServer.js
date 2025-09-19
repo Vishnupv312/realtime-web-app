@@ -96,6 +96,8 @@ function createSocketServer(server) {
       socket.on('webrtc:offer', (data) => handlers.handleWebRTCOffer(socket, data));
       socket.on('webrtc:answer', (data) => handlers.handleWebRTCAnswer(socket, data));
       socket.on('webrtc:ice-candidate', (data) => handlers.handleICECandidate(socket, data));
+      socket.on('webrtc:call-end', (data) => handlers.handleWebRTCCallEnd(socket, data));
+      socket.on('webrtc:call-reject', (data) => handlers.handleWebRTCCallReject(socket, data));
 
       // Handle typing indicators
       socket.on('chat:typing:start', () => handleTypingStart(socket));

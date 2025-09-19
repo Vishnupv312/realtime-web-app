@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { PhoneOff, Mic, MicOff, Video, VideoOff, Maximize2, Minimize2, Phone } from "lucide-react"
@@ -70,7 +70,17 @@ export default function VideoCallModal({
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
+      console.log('📺 VideoCallModal: Attaching remote stream to video element')
+      console.log('📺 Remote stream tracks:', remoteStream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled, readyState: t.readyState})))
+      
       remoteVideoRef.current.srcObject = remoteStream
+      
+      // Ensure video plays (important for mobile)
+      remoteVideoRef.current.play().catch(error => {
+        console.log('📺 Remote video play error (might be expected on mobile):', error)
+      })
+    } else if (!remoteStream) {
+      console.log('📺 VideoCallModal: No remote stream available yet')
     }
   }, [remoteStream, remoteVideoRef])
 
@@ -134,6 +144,9 @@ export default function VideoCallModal({
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="max-w-full h-screen w-full p-0 m-0 rounded-none border-none bg-black">
+        <DialogTitle className="sr-only">
+          {callType === "video" ? "Video" : "Audio"} call with {connectedUser?.username || "User"}
+        </DialogTitle>
         <div className="relative h-full w-full overflow-hidden">
           
           {/* Remote Video - Full Screen Background */}
@@ -148,8 +161,12 @@ export default function VideoCallModal({
                   ref={remoteVideoRef}
                   autoPlay
                   playsInline
+                  muted={false} /* Remote video should NOT be muted */
                   className="w-full h-full object-cover"
                   style={{ transform: "scaleX(-1)" }}
+                  onLoadedMetadata={() => console.log('📺 Remote video metadata loaded')}
+                  onPlaying={() => console.log('📺 Remote video is now playing!')}
+                  onError={(e) => console.error('❌ Remote video error:', e)}
                 />
               </motion.div>
             ) : (

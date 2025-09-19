@@ -37,9 +37,17 @@ const useWebRTC = (props?: UseWebRTCProps) => {
   const peerConnection = useRef<RTCPeerConnection | null>(null)
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  const iceCandidateQueue = useRef<RTCIceCandidate[]>([])
 
   const servers: RTCConfiguration = {
-    iceServers: [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }],
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+      { urls: "stun:stun2.l.google.com:19302" },
+      { urls: "stun:stun3.l.google.com:19302" },
+      { urls: "stun:stun4.l.google.com:19302" },
+    ],
+    iceCandidatePoolSize: 10,
   }
 
   useEffect(() => {
@@ -72,25 +80,71 @@ const useWebRTC = (props?: UseWebRTCProps) => {
 
     peerConnection.current.onicecandidate = (event) => {
       if (event.candidate) {
+        console.log('🧊 Sending ICE candidate:', event.candidate.type)
         socketService.sendIceCandidate(event.candidate)
+      } else {
+        console.log('🧊 All ICE candidates sent')
       }
     }
 
     peerConnection.current.ontrack = (event) => {
-      console.log('Received remote stream:', event.streams[0])
-      setRemoteStream(event.streams[0])
+      console.log('📺 ONTRACK EVENT FIRED!')
+      console.log('📺 Remote stream received:', event.streams[0])
+      console.log('📺 Stream tracks:', event.streams[0].getTracks().map(t => ({kind: t.kind, enabled: t.enabled, readyState: t.readyState})))
+      
+      const remoteStream = event.streams[0]
+      setRemoteStream(remoteStream)
+      
+      // Immediately attach to video element if it exists
+      setTimeout(() => {
+        if (remoteVideoRef.current && remoteStream) {
+          console.log('📺 Attaching remote stream to video element')
+          remoteVideoRef.current.srcObject = remoteStream
+          remoteVideoRef.current.play().catch(e => console.log('Remote video play error (expected on mobile):', e))
+        }
+      }, 100)
+      
       setCallState("connected")
+    }
+
+    peerConnection.current.oniceconnectionstatechange = () => {
+      if (peerConnection.current) {
+        console.log('🧊 ICE connection state changed:', peerConnection.current.iceConnectionState)
+      }
     }
 
     peerConnection.current.onconnectionstatechange = () => {
       if (peerConnection.current) {
-        console.log('Connection state changed:', peerConnection.current.connectionState)
-        if (peerConnection.current.connectionState === 'connected') {
-          setCallState("connected")
-        } else if (peerConnection.current.connectionState === 'disconnected' || 
-                  peerConnection.current.connectionState === 'failed') {
-          // Handle connection failures - end call as remote end to avoid double signaling
-          endCall(true)
+        console.log('🔗 Connection state changed:', peerConnection.current.connectionState)
+        
+        switch (peerConnection.current.connectionState) {
+          case 'connected':
+            console.log('✅ WebRTC connection established successfully!')
+            setCallState("connected")
+            break
+          case 'connecting':
+            console.log('🔗 WebRTC connection in progress...')
+            setCallState("connecting")
+            break
+          case 'failed':
+            console.log('❌ WebRTC connection failed - ending call')
+            endCall(true)
+            break
+          case 'disconnected':
+            console.log('⚠️ WebRTC connection disconnected - waiting before ending call')
+            // Give it a moment to reconnect before ending the call
+            setTimeout(() => {
+              if (peerConnection.current?.connectionState === 'disconnected') {
+                console.log('❌ Connection remained disconnected - ending call')
+                endCall(true)
+              }
+            }, 3000) // Wait 3 seconds
+            break
+          case 'closed':
+            console.log('🔗 WebRTC connection closed')
+            break
+          default:
+            console.log('🔗 WebRTC connection state:', peerConnection.current.connectionState)
         }
       }
     }
@@ -158,13 +212,19 @@ const useWebRTC = (props?: UseWebRTCProps) => {
       // Create peer connection and add tracks
       const pc = createPeerConnection()
       stream.getTracks().forEach((track) => {
-        console.log(`➕ Adding ${track.kind} track to peer connection`)
+        console.log(`➕ Adding ${track.kind} track to peer connection (caller)`)
+        console.log(`   Track details: enabled=${track.enabled}, readyState=${track.readyState}`)
         pc.addTrack(track, stream)
       })
+      
+      // Log current peer connection state
+      console.log('🔗 Peer connection created for caller, current state:', pc.connectionState)
 
       // Create and send offer
+      console.log('📡 Creating WebRTC offer...')
       const offer = await pc.createOffer()
       await pc.setLocalDescription(offer)
+      console.log('📡 Local description set:', offer)
 
       socketService.sendOffer(offer, type)
       setCallState("ringing")
@@ -256,13 +316,25 @@ const useWebRTC = (props?: UseWebRTCProps) => {
       const pc = createPeerConnection()
       stream.getTracks().forEach((track) => {
         console.log(`➕ Adding ${track.kind} track to peer connection (callee)`)
+        console.log(`   Track details: enabled=${track.enabled}, readyState=${track.readyState}`)
         pc.addTrack(track, stream)
       })
+      
+      // Log current peer connection state
+      console.log('🔗 Peer connection created for callee, current state:', pc.connectionState)
 
       // Set remote description first, then create answer
+      console.log('📡 Setting remote description from offer...')
       await pc.setRemoteDescription(new RTCSessionDescription(incomingCallData.offer))
+      console.log('✅ Remote description set successfully')
+      
+      // Process any queued ICE candidates now that remote description is set
+      await processQueuedIceCandidates()
+      
+      console.log('📡 Creating WebRTC answer...')
       const answer = await pc.createAnswer()
       await pc.setLocalDescription(answer)
+      console.log('📡 Local description set:', answer)
 
       socketService.sendAnswer(answer)
       console.log('📡 Call answer sent successfully')
@@ -343,32 +415,69 @@ const useWebRTC = (props?: UseWebRTCProps) => {
   }
 
   const handleReceiveOffer = async (data: IncomingCallData): Promise<void> => {
+    console.log('📞 Received WebRTC offer:', data)
     setIsIncomingCall(true)
     setIncomingCallData(data)
   }
 
   const handleReceiveAnswer = async (data: { answer: RTCSessionDescriptionInit }): Promise<void> => {
     try {
-      if (peerConnection.current && peerConnection.current.signalingState === 'have-local-offer') {
-        setCallState("connecting")
-        await peerConnection.current.setRemoteDescription(new RTCSessionDescription(data.answer))
-        console.log('Successfully set remote answer')
+      console.log('📞 Received WebRTC answer:', data)
+      console.log('📞 Peer connection state:', peerConnection.current?.signalingState)
+      
+      if (peerConnection.current) {
+        if (peerConnection.current.signalingState === 'have-local-offer') {
+          setCallState("connecting")
+          await peerConnection.current.setRemoteDescription(new RTCSessionDescription(data.answer))
+          console.log('✅ Successfully set remote answer - WebRTC connection should be establishing...')
+          
+          // Process any queued ICE candidates now that remote description is set
+          await processQueuedIceCandidates()
+        } else {
+          console.warn('⚠️ Peer connection not in correct state for answer:', peerConnection.current.signalingState)
+        }
       } else {
-        console.warn('Peer connection not in correct state for answer:', peerConnection.current?.signalingState)
+        console.error('❌ No peer connection available when receiving answer')
       }
     } catch (error) {
-      console.error("Error handling answer:", error)
+      console.error("❌ Error handling answer:", error)
     }
   }
 
   const handleReceiveIceCandidate = async (data: { candidate: RTCIceCandidate }): Promise<void> => {
     try {
-      if (peerConnection.current) {
+      console.log('🧊 Received ICE candidate:', data.candidate.type, data.candidate.candidate)
+      
+      if (peerConnection.current && peerConnection.current.remoteDescription) {
         await peerConnection.current.addIceCandidate(data.candidate)
+        console.log('✅ ICE candidate added successfully')
+      } else {
+        console.log('🧊 Queuing ICE candidate - remote description not set yet')
+        iceCandidateQueue.current.push(data.candidate)
       }
     } catch (error) {
-      console.error("Error adding ICE candidate:", error)
+      console.error("❌ Error adding ICE candidate:", error)
     }
+  }
+  
+  const processQueuedIceCandidates = async (): Promise<void> => {
+    if (!peerConnection.current || !peerConnection.current.remoteDescription) {
+      return
+    }
+    
+    console.log(`🧊 Processing ${iceCandidateQueue.current.length} queued ICE candidates`)
+    
+    for (const candidate of iceCandidateQueue.current) {
+      try {
+        await peerConnection.current.addIceCandidate(candidate)
+        console.log('✅ Queued ICE candidate added successfully')
+      } catch (error) {
+        console.error('❌ Error adding queued ICE candidate:', error)
+      }
+    }
+    
+    // Clear the queue
+    iceCandidateQueue.current = []
   }
 
   const handleReceiveCallEnd = (): void => {
@@ -457,6 +566,9 @@ const useWebRTC = (props?: UseWebRTCProps) => {
       remoteVideoRef.current.srcObject = null
     }
 
+    // Clear ICE candidate queue
+    iceCandidateQueue.current = []
+    
     // Reset all state
     setRemoteStream(null)
     setIsCallActive(false)
