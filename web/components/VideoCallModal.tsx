@@ -1,13 +1,14 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { PhoneOff, Mic, MicOff, Video, VideoOff, Maximize2, Minimize2 } from "lucide-react"
-import { motion } from "framer-motion"
-import useWebRTC from "@/hooks/useWebRTC"
-import { useState } from "react"
+import { PhoneOff, Mic, MicOff, Video, VideoOff, Maximize2, Minimize2, Phone } from "lucide-react"
+import { motion, AnimatePresence } from "framer-motion"
+
+import MediaErrorAlert from "@/components/MediaErrorAlert"
+import { MediaError } from "@/lib/mediaUtils"
 
 interface VideoCallModalProps {
   isOpen: boolean
@@ -16,14 +17,50 @@ interface VideoCallModalProps {
     id: string
     username: string
   } | null
+  localStream: MediaStream | null
+  remoteStream: MediaStream | null
+  callType: "video" | "audio" | null
+  callState: "idle" | "calling" | "ringing" | "connecting" | "connected"
+  isCaller: boolean
+  localVideoRef: React.RefObject<HTMLVideoElement>
+  remoteVideoRef: React.RefObject<HTMLVideoElement>
+  mediaError: MediaError | null
+  isRequestingPermissions: boolean
+  endCall: () => void
 }
 
-export default function VideoCallModal({ isOpen, onClose, connectedUser }: VideoCallModalProps) {
-  const { localStream, remoteStream, isCallActive, callType, localVideoRef, remoteVideoRef, endCall } = useWebRTC()
-
+export default function VideoCallModal({ 
+  isOpen, 
+  onClose, 
+  connectedUser, 
+  localStream, 
+  remoteStream, 
+  callType, 
+  callState, 
+  isCaller,
+  localVideoRef, 
+  remoteVideoRef,
+  mediaError,
+  isRequestingPermissions,
+  endCall 
+}: VideoCallModalProps) {
   const [isMuted, setIsMuted] = useState(false)
   const [isVideoOff, setIsVideoOff] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
+  const [callDuration, setCallDuration] = useState(0)
+
+  // Call duration timer
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+    if (callState === "connected") {
+      interval = setInterval(() => {
+        setCallDuration(prev => prev + 1)
+      }, 1000)
+    } else {
+      setCallDuration(0)
+    }
+    return () => clearInterval(interval)
+  }, [callState])
 
   useEffect(() => {
     if (localVideoRef.current && localStream) {
@@ -71,45 +108,110 @@ export default function VideoCallModal({ isOpen, onClose, connectedUser }: Video
       .slice(0, 2)
   }
 
-  if (!isCallActive) return null
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
+  const getCallStateText = () => {
+    switch (callState) {
+      case "calling":
+        return "Calling..."
+      case "ringing":
+        return "Ringing..."
+      case "connecting":
+        return "Connecting..."
+      case "connected":
+        return formatDuration(callDuration)
+      default:
+        return ""
+    }
+  }
+
+  if (!isOpen) return null
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className={`${isFullscreen ? "max-w-full h-full" : "max-w-4xl"} p-0 bg-black`}>
-        <div className="relative h-full min-h-[600px] bg-black rounded-lg overflow-hidden">
-          {/* Remote Video */}
+      <DialogContent className="max-w-full h-screen w-full p-0 m-0 rounded-none border-none bg-black">
+        <div className="relative h-full w-full overflow-hidden">
+          
+          {/* Remote Video - Full Screen Background */}
           <div className="absolute inset-0">
             {remoteStream && callType === "video" ? (
-              <video
-                ref={remoteVideoRef}
-                autoPlay
-                playsInline
-                className="w-full h-full object-cover"
-                style={{ transform: "scaleX(-1)" }}
-              />
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="w-full h-full"
+              >
+                <video
+                  ref={remoteVideoRef}
+                  autoPlay
+                  playsInline
+                  className="w-full h-full object-cover"
+                  style={{ transform: "scaleX(-1)" }}
+                />
+              </motion.div>
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gray-900">
-                <div className="text-center">
-                  <Avatar className="h-24 w-24 mx-auto mb-4">
-                    <AvatarFallback className="bg-blue-600 text-white text-2xl">
+              /* Gradient background when no remote video */
+              <div className="w-full h-full bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900">
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
+                  {/* Media Error Display */}
+                  {mediaError && (
+                    <div className="w-full max-w-md mb-6">
+                      <MediaErrorAlert 
+                        error={mediaError}
+                        onDismiss={() => {
+                          endCall()
+                          onClose()
+                        }}
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Permission Request Display */}
+                  {isRequestingPermissions && (
+                    <div className="mb-6 p-4 bg-blue-900/50 rounded-lg border border-blue-400/30">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-400"></div>
+                        <p className="text-blue-200 font-medium">Requesting Permissions</p>
+                      </div>
+                      <p className="text-blue-300 text-sm">
+                        Please allow access to your camera and microphone when prompted by your browser.
+                      </p>
+                    </div>
+                  )}
+                  
+                  <Avatar className="h-24 w-24 sm:h-32 sm:w-32 mb-6 ring-4 ring-white/20">
+                    <AvatarFallback className="bg-gradient-to-br from-blue-600 to-purple-600 text-white text-2xl sm:text-4xl">
                       {connectedUser ? getInitials(connectedUser.username) : "?"}
                     </AvatarFallback>
                   </Avatar>
-                  <h3 className="text-white text-xl font-semibold">{connectedUser?.username}</h3>
-                  <p className="text-gray-400">{callType === "audio" ? "Audio call" : "Camera is off"}</p>
+                  <h2 className="text-white text-xl sm:text-3xl font-light mb-2">{connectedUser?.username}</h2>
+                  <p className="text-gray-300 text-sm sm:text-lg mb-4">{getCallStateText()}</p>
+                  {callState === "ringing" && (
+                    <motion.div
+                      animate={{ scale: [1, 1.1, 1] }}
+                      transition={{ repeat: Infinity, duration: 1.5 }}
+                      className="inline-flex items-center gap-2 text-blue-400"
+                    >
+                      <Phone className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <span className="text-sm">{callType === "video" ? "Video calling" : "Voice calling"}</span>
+                    </motion.div>
+                  )}
                 </div>
               </div>
             )}
           </div>
 
-          {/* Local Video */}
-          {callType === "video" && (
+          {/* Local Video - Small Overlay (WhatsApp Style) */}
+          {callType === "video" && localStream && (
             <motion.div
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
-              className="absolute top-4 right-4 w-48 h-36 bg-gray-800 rounded-lg overflow-hidden border-2 border-white/20"
+              className="absolute top-4 right-4 w-20 h-28 xs:w-24 xs:h-32 sm:w-28 sm:h-36 md:w-32 md:h-44 bg-gray-900 rounded-lg overflow-hidden shadow-2xl border-2 border-white/30 z-10"
             >
-              {localStream && !isVideoOff ? (
+              {!isVideoOff ? (
                 <video
                   ref={localVideoRef}
                   autoPlay
@@ -119,74 +221,97 @@ export default function VideoCallModal({ isOpen, onClose, connectedUser }: Video
                   style={{ transform: "scaleX(-1)" }}
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gray-700">
-                  <VideoOff className="w-8 h-8 text-gray-400" />
+                <div className="w-full h-full flex items-center justify-center bg-gray-800">
+                  <VideoOff className="w-4 h-4 sm:w-6 sm:h-6 text-gray-400" />
                 </div>
               )}
             </motion.div>
           )}
 
-          {/* Call Controls */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="absolute bottom-6 left-1/2 transform -translate-x-1/2"
+          {/* Top Status Bar */}
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }} 
+            animate={{ opacity: 1, y: 0 }} 
+            className="absolute top-0 left-0 right-0 z-20"
           >
-            <div className="flex items-center gap-4 bg-black/50 backdrop-blur-sm rounded-full px-6 py-4">
-              {/* Mute Button */}
-              <Button
-                variant={isMuted ? "destructive" : "secondary"}
-                size="lg"
-                className="rounded-full w-12 h-12 p-0"
-                onClick={toggleMute}
-              >
-                {isMuted ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-              </Button>
-
-              {/* Video Toggle (only for video calls) */}
-              {callType === "video" && (
-                <Button
-                  variant={isVideoOff ? "destructive" : "secondary"}
-                  size="lg"
-                  className="rounded-full w-12 h-12 p-0"
-                  onClick={toggleVideo}
-                >
-                  {isVideoOff ? <VideoOff className="w-5 h-5" /> : <Video className="w-5 h-5" />}
-                </Button>
-              )}
-
-              {/* Fullscreen Toggle */}
-              <Button
-                variant="secondary"
-                size="lg"
-                className="rounded-full w-12 h-12 p-0"
-                onClick={() => setIsFullscreen(!isFullscreen)}
-              >
-                {isFullscreen ? <Minimize2 className="w-5 h-5" /> : <Maximize2 className="w-5 h-5" />}
-              </Button>
-
-              {/* End Call Button */}
-              <Button
-                variant="destructive"
-                size="lg"
-                className="rounded-full w-12 h-12 p-0 bg-red-600 hover:bg-red-700"
-                onClick={handleEndCall}
-              >
-                <PhoneOff className="w-5 h-5" />
-              </Button>
+            <div className="bg-gradient-to-b from-black/80 to-transparent p-3 sm:p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 sm:gap-3">
+                  <Avatar className="h-8 w-8 sm:h-10 sm:w-10 ring-2 ring-white/30">
+                    <AvatarFallback className="bg-gradient-to-br from-blue-600 to-purple-600 text-white text-xs sm:text-sm">
+                      {connectedUser ? getInitials(connectedUser.username) : "?"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <h3 className="text-white font-medium text-sm sm:text-base">{connectedUser?.username}</h3>
+                    <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-300">
+                      <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${
+                        callState === "connected" ? "bg-green-400" : "bg-yellow-400"
+                      } animate-pulse`}></div>
+                      <span>{getCallStateText()}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </motion.div>
 
-          {/* Call Info */}
-          <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="absolute top-6 left-6">
-            <div className="bg-black/50 backdrop-blur-sm rounded-lg px-4 py-2">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="text-white text-sm font-medium">
-                  {callType === "video" ? "Video Call" : "Audio Call"}
-                </span>
+          {/* Bottom Control Bar */}
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="absolute bottom-0 left-0 right-0 z-20"
+          >
+            <div className="bg-gradient-to-t from-black/90 to-transparent p-4 sm:p-6 pb-6 sm:pb-8">
+              <div className="flex items-center justify-center gap-4 sm:gap-6">
+                
+                {/* Mute/Unmute */}
+                <motion.div whileTap={{ scale: 0.95 }}>
+                  <Button
+                    variant={isMuted ? "destructive" : "secondary"}
+                    className={`rounded-full w-12 h-12 sm:w-14 sm:h-14 p-0 shadow-lg ${
+                      isMuted 
+                        ? "bg-red-600 hover:bg-red-700 text-white" 
+                        : "bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm"
+                    }`}
+                    onClick={toggleMute}
+                  >
+                    {isMuted ? <MicOff className="w-5 h-5 sm:w-6 sm:h-6" /> : <Mic className="w-5 h-5 sm:w-6 sm:h-6" />}
+                  </Button>
+                </motion.div>
+
+                {/* Video Toggle */}
+                {callType === "video" && (
+                  <motion.div whileTap={{ scale: 0.95 }}>
+                    <Button
+                      variant={isVideoOff ? "destructive" : "secondary"}
+                      className={`rounded-full w-12 h-12 sm:w-14 sm:h-14 p-0 shadow-lg ${
+                        isVideoOff 
+                          ? "bg-red-600 hover:bg-red-700 text-white" 
+                          : "bg-white/20 hover:bg-white/30 text-white backdrop-blur-sm"
+                      }`}
+                      onClick={toggleVideo}
+                    >
+                      {isVideoOff ? <VideoOff className="w-5 h-5 sm:w-6 sm:h-6" /> : <Video className="w-5 h-5 sm:w-6 sm:h-6" />}
+                    </Button>
+                  </motion.div>
+                )}
+
+                {/* End Call */}
+                <motion.div 
+                  whileTap={{ scale: 0.95 }}
+                  whileHover={{ scale: 1.05 }}
+                >
+                  <Button
+                    variant="destructive"
+                    className="rounded-full w-14 h-14 sm:w-16 sm:h-16 p-0 bg-red-600 hover:bg-red-700 shadow-lg"
+                    onClick={handleEndCall}
+                  >
+                    <PhoneOff className="w-6 h-6 sm:w-7 sm:h-7" />
+                  </Button>
+                </motion.div>
               </div>
-              <p className="text-gray-300 text-xs">{connectedUser?.username}</p>
             </div>
           </motion.div>
         </div>

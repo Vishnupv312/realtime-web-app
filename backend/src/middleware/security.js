@@ -71,6 +71,10 @@ const corsOptions = {
 
     const allowedOrigins = [
       process.env.CORS_ORIGIN,
+      // Production URLs
+      "https://realtime-web-app-ecru.vercel.app",
+      "https://realtime-web-app.onrender.com",
+      // Development URLs
       `http://${DEV_LAN_IP}:3000`,
       `http://${DEV_LAN_IP}:3335`,
       "http://localhost:3000",
@@ -104,6 +108,10 @@ const helmetConfig = {
         "'self'",
         "data:",
         "https:",
+        // Production URLs
+        "https://realtime-web-app-ecru.vercel.app",
+        "https://realtime-web-app.onrender.com",
+        // Development URLs
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:3335",
@@ -115,6 +123,11 @@ const helmetConfig = {
       ],
       connectSrc: [
         "'self'",
+        // Production URLs
+        "https://realtime-web-app-ecru.vercel.app",
+        "https://realtime-web-app.onrender.com",
+        "wss://realtime-web-app.onrender.com", // WebSocket connection
+        // Development URLs
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:3335",
@@ -128,6 +141,10 @@ const helmetConfig = {
       objectSrc: ["'none'"],
       mediaSrc: [
         "'self'",
+        // Production URLs
+        "https://realtime-web-app-ecru.vercel.app",
+        "https://realtime-web-app.onrender.com",
+        // Development URLs
         "http://localhost:3000",
         "http://localhost:3001",
         "http://localhost:3335",

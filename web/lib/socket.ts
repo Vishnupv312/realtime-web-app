@@ -102,6 +102,14 @@ class SocketService {
     this.socket?.emit("webrtc:ice-candidate", { candidate })
   }
 
+  sendCallEnd(): void {
+    this.socket?.emit("webrtc:call-end")
+  }
+
+  sendCallReject(): void {
+    this.socket?.emit("webrtc:call-reject")
+  }
+
   // Typing indicators
   startTyping(): void {
     this.socket?.emit("chat:typing:start")

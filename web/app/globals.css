@@ -123,3 +123,26 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Custom responsive utilities for video calling */
+@media (max-width: 475px) {
+  .xs\:w-24 {
+    width: 6rem;
+  }
+  .xs\:h-32 {
+    height: 8rem;
+  }
+}
+
+/* Ensure video elements maintain aspect ratio */
+video {
+  object-fit: cover;
+}
+
+/* Mobile-specific adjustments for video call modal */
+@media (max-width: 640px) {
+  .video-call-modal {
+    padding: 0;
+    margin: 0;
+  }
+}

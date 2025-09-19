@@ -60,6 +60,7 @@ export default function ChatPage() {
     isMatching,
     requestMatch,
     sendMessage,
+    addSystemMessage,
     clearChat,
     startTyping,
     stopTyping,
@@ -73,7 +74,21 @@ export default function ChatPage() {
     acceptCall,
     rejectCall,
     isCallActive,
-  } = useWebRTC();
+    localStream,
+    remoteStream,
+    callType,
+    callState,
+    isCaller,
+    localVideoRef,
+    remoteVideoRef,
+    mediaError,
+    isRequestingPermissions,
+    endCall,
+  } = useWebRTC({
+    connectedUser,
+    currentUserId: user?.id,
+    addSystemMessage
+  });
   const router = useRouter();
 
   const [messageInput, setMessageInput] = useState("");
@@ -309,16 +324,16 @@ export default function ChatPage() {
 
   const renderMessage = (message: any, index: number) => {
     // Handle system messages differently (centered)
-    if (message.senderId === "system") {
+    if (message.senderId === "system" || message.type === "system" || message.isSystemMessage) {
       return (
         <motion.div
-          key={index}
+          key={message.id || index}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3 }}
-          className="flex justify-center my-2"
+          className="flex justify-center my-2 sm:my-3"
         >
-          <div className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs px-3 py-1.5 rounded-full">
+          <div className="bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs sm:text-sm px-3 py-1.5 sm:px-4 sm:py-2 rounded-full max-w-xs sm:max-w-sm text-center break-words">
             {message.content}
           </div>
         </motion.div>
@@ -774,6 +789,16 @@ export default function ChatPage() {
           isOpen={showCallModal}
           onClose={() => setShowCallModal(false)}
           connectedUser={connectedUser}
+          localStream={localStream}
+          remoteStream={remoteStream}
+          callType={callType}
+          callState={callState}
+          isCaller={isCaller}
+          localVideoRef={localVideoRef}
+          remoteVideoRef={remoteVideoRef}
+          mediaError={mediaError}
+          isRequestingPermissions={isRequestingPermissions}
+          endCall={endCall}
         />
       </div>
     </ProtectedRoute>

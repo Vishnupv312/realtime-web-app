@@ -19,7 +19,7 @@ interface Message {
   id: string
   senderId: string
   senderUsername: string
-  type: "text" | "file" | "voice"
+  type: "text" | "file" | "voice" | "system"
   content:
     | string
     | {
@@ -37,6 +37,7 @@ interface Message {
       }
   timestamp: string
   status?: "sending" | "sent" | "delivered"
+  isSystemMessage?: boolean // For system-generated messages like call logs
 }
 
 interface ChatContextType {
@@ -47,7 +48,8 @@ interface ChatContextType {
   isMatching: boolean
   requestMatch: () => void
   cancelMatch: () => void
-  sendMessage: (content: string | any, type?: "text" | "file" | "voice") => void
+  sendMessage: (content: string | any, type?: "text" | "file" | "voice" | "system") => void
+  addSystemMessage: (content: string) => void
   clearChat: () => void
   startTyping: () => void
   stopTyping: () => void
@@ -362,6 +364,19 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     saveChatHistory(message)
   }
 
+  const addSystemMessage = (content: string): void => {
+    const systemMessage: Message = {
+      id: `system_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      senderId: "system",
+      senderUsername: "System",
+      type: "system",
+      content,
+      timestamp: new Date().toISOString(),
+      isSystemMessage: true
+    }
+    addMessage(systemMessage)
+  }
+
   const updateMessageStatus = (messageId: string, status: "sending" | "sent" | "delivered"): void => {
     setMessages((prev) => prev.map((msg) => (msg.id === messageId ? { ...msg, status } : msg)))
   }
@@ -399,6 +414,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
     requestMatch,
     cancelMatch,
     sendMessage,
+    addSystemMessage,
     clearChat,
     startTyping: () => socketService.startTyping(),
     stopTyping: () => socketService.stopTyping(),
