@@ -61,12 +61,12 @@ const DEV_LAN_IP = "192.168.29.177"; // <-- replace with your LAN IP
 // CORS configuration
 const corsOptions = {
   origin: function (origin, callback) {
-    // In development, allow all origins including LAN IP
+    // In development, allow all origins
     if (process.env.NODE_ENV !== "production") {
       return callback(null, true);
     }
 
-    // Allow requests with no origin (mobile apps, etc.)
+    // Allow requests with no origin (mobile apps, Postman, etc.)
     if (!origin) return callback(null, true);
 
     const allowedOrigins = [
@@ -83,19 +83,39 @@ const corsOptions = {
       "http://127.0.0.1:3000",
       "http://127.0.0.1:3001",
       "http://127.0.0.1:3335",
-    ];
+    ].filter(Boolean); // Remove any undefined values
 
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    console.log(`CORS check - Origin: ${origin}`);
+    console.log(`CORS check - Allowed origins:`, allowedOrigins);
+
+    if (allowedOrigins.includes(origin)) {
+      console.log(`CORS allowed for origin: ${origin}`);
       callback(null, true);
     } else {
+      console.log(`CORS blocked origin: ${origin}`);
       logger.warn(`CORS blocked origin: ${origin}`);
-      callback(new Error("Not allowed by CORS"));
+      // In production, be more permissive for debugging
+      if (process.env.NODE_ENV === "production" && origin && origin.includes("vercel.app")) {
+        console.log(`Allowing Vercel origin: ${origin}`);
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
     }
   },
   credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+  allowedHeaders: [
+    "Content-Type", 
+    "Authorization", 
+    "X-Requested-With",
+    "Accept",
+    "Origin",
+    "X-CSRF-Token"
+  ],
   exposedHeaders: ["X-Total-Count"],
+  optionsSuccessStatus: 200, // For legacy browser support
+  preflightContinue: false,
 };
 
 const helmetConfig = {

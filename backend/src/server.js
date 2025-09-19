@@ -20,6 +20,9 @@ const {
   errorHandler,
 } = require("./middleware/security");
 
+// Temporary debug CORS
+const { debugCors, permissiveCors } = require("./middleware/cors-debug");
+
 const { cleanupOldFiles } = require("./middleware/upload");
 
 // Import routes
@@ -35,7 +38,13 @@ function createApp() {
 
   // Security middleware
   app.use(helmet);
-  app.use(cors);
+  // Use debug CORS for production debugging
+  if (process.env.NODE_ENV === "production") {
+    console.log("Using debug CORS for production");
+    app.use(debugCors);
+  } else {
+    app.use(cors);
+  }
   app.use(securityHeaders);
   app.use(extractClientIP);
 
@@ -85,6 +94,17 @@ function initializeRoutes(app, socketApi) {
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       version: "1.0.0",
+    });
+  });
+
+  // CORS debug endpoint
+  app.get("/api/cors-test", (req, res) => {
+    res.json({
+      success: true,
+      message: "CORS is working",
+      origin: req.headers.origin,
+      headers: req.headers,
+      timestamp: new Date().toISOString(),
     });
   });
 
