@@ -107,6 +107,13 @@ const useWebRTC = (props?: UseWebRTCProps) => {
 
     peerConnection.current.ontrack = (event) => {
       console.log("📺 ONTRACK EVENT FIRED!");
+      console.log("📺 Track received:", {
+        kind: event.track.kind,
+        id: event.track.id,
+        enabled: event.track.enabled,
+        readyState: event.track.readyState,
+        muted: event.track.muted
+      });
       console.log("📺 Remote stream received:", event.streams[0]);
       console.log(
         "📺 Stream tracks:",
@@ -116,11 +123,18 @@ const useWebRTC = (props?: UseWebRTCProps) => {
             kind: t.kind,
             enabled: t.enabled,
             readyState: t.readyState,
+            muted: t.muted
           }))
       );
 
       const remoteStream = event.streams[0];
       setRemoteStream(remoteStream);
+      
+      // Log total receivers
+      console.log(`🔍 Total receivers: ${peerConnection.current?.getReceivers().length}`);
+      peerConnection.current?.getReceivers().forEach((receiver, index) => {
+        console.log(`   Receiver ${index}: ${receiver.track?.kind} track`);
+      });
 
       // Immediately attach to video element if it exists
       setTimeout(() => {
@@ -319,7 +333,14 @@ const useWebRTC = (props?: UseWebRTCProps) => {
         console.log(
           `   Track details: enabled=${track.enabled}, readyState=${track.readyState}`
         );
-        pc.addTrack(track, stream);
+        const sender = pc.addTrack(track, stream);
+        console.log(`   Sender added:`, sender);
+      });
+
+      // Verify senders
+      console.log(`🔍 Total senders on peer connection: ${pc.getSenders().length}`);
+      pc.getSenders().forEach((sender, index) => {
+        console.log(`   Sender ${index}: ${sender.track?.kind} track`);
       });
 
       // Log current peer connection state
@@ -333,6 +354,14 @@ const useWebRTC = (props?: UseWebRTCProps) => {
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
       console.log("📡 Local description set:", offer);
+      
+      // Check if SDP contains media tracks
+      const sdpHasAudio = offer.sdp?.includes('m=audio');
+      const sdpHasVideo = offer.sdp?.includes('m=video');
+      console.log(`🔍 SDP analysis: audio=${sdpHasAudio}, video=${sdpHasVideo}`);
+      if (!sdpHasAudio && !sdpHasVideo) {
+        console.error('❌ SDP does not contain any media tracks!');
+      }
 
       socketService.sendOffer(offer, type);
       setCallState("ringing");
@@ -454,7 +483,14 @@ const useWebRTC = (props?: UseWebRTCProps) => {
         console.log(
           `   Track details: enabled=${track.enabled}, readyState=${track.readyState}`
         );
-        pc.addTrack(track, stream);
+        const sender = pc.addTrack(track, stream);
+        console.log(`   Sender added:`, sender);
+      });
+
+      // Verify senders
+      console.log(`🔍 Total senders on peer connection: ${pc.getSenders().length}`);
+      pc.getSenders().forEach((sender, index) => {
+        console.log(`   Sender ${index}: ${sender.track?.kind} track`);
       });
 
       // Log current peer connection state
@@ -480,6 +516,14 @@ const useWebRTC = (props?: UseWebRTCProps) => {
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       console.log("📡 Local description set:", answer);
+      
+      // Check if SDP contains media tracks
+      const sdpHasAudio = answer.sdp?.includes('m=audio');
+      const sdpHasVideo = answer.sdp?.includes('m=video');
+      console.log(`🔍 SDP analysis: audio=${sdpHasAudio}, video=${sdpHasVideo}`);
+      if (!sdpHasAudio && !sdpHasVideo) {
+        console.error('❌ SDP does not contain any media tracks!');
+      }
 
       socketService.sendAnswer(answer);
       console.log("📡 Call answer sent successfully");

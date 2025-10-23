@@ -177,7 +177,6 @@ export default function VideoCallModal({
                   playsInline
                   muted={false} /* Remote video should NOT be muted */
                   className="w-full h-full object-cover"
-                  style={{ transform: "scaleX(-1)" }}
                   onLoadedMetadata={() => console.log('📺 Remote video metadata loaded')}
                   onPlaying={() => console.log('📺 Remote video is now playing!')}
                   onError={(e) => console.error('❌ Remote video error:', e)}
