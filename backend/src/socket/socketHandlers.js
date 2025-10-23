@@ -414,15 +414,15 @@ function createSocketHandlers(io) {
       }
 
       const { offer, type } = data; // type: 'audio' or 'video'
-      logger.debug(`🔍 WebRTC Offer Debug:`);
-      logger.debug(`   Sender: ${guestSession.username} (${guestSession.id})`);
-      logger.debug(`   Connected user ID: ${guestSession.connectedUser}`);
-      logger.debug(`   Looking up socket for: ${guestSession.connectedUser}`);
-      logger.debug(`   userSockets Map has ${userSockets.size} entries`);
-      logger.debug(`   userSockets keys: ${Array.from(userSockets.keys()).join(', ')}`);
+      logger.info(`🔍 WebRTC Offer Debug:`);
+      logger.info(`   Sender: ${guestSession.username} (${guestSession.id})`);
+      logger.info(`   Connected user ID: ${guestSession.connectedUser}`);
+      logger.info(`   Looking up socket for: ${guestSession.connectedUser}`);
+      logger.info(`   userSockets Map has ${userSockets.size} entries`);
+      logger.info(`   userSockets keys: ${Array.from(userSockets.keys()).join(', ')}`);
       
       const connectedUserSocketId = userSockets.get(guestSession.connectedUser);
-      logger.debug(`   Found socket ID: ${connectedUserSocketId || 'NOT FOUND'}`);
+      logger.info(`   Found socket ID: ${connectedUserSocketId || 'NOT FOUND'}`);
 
       if (connectedUserSocketId) {
         io.to(connectedUserSocketId).emit('webrtc:offer', {
@@ -456,9 +456,9 @@ function createSocketHandlers(io) {
       }
 
       const { answer } = data;
-      logger.debug(`🔍 WebRTC Answer Debug: ${guestSession.username} -> ${guestSession.connectedUser}`);
+      logger.info(`🔍 WebRTC Answer Debug: ${guestSession.username} -> ${guestSession.connectedUser}`);
       const connectedUserSocketId = userSockets.get(guestSession.connectedUser);
-      logger.debug(`   Socket ID lookup result: ${connectedUserSocketId || 'NOT FOUND'}`);
+      logger.info(`   Socket ID lookup result: ${connectedUserSocketId || 'NOT FOUND'}`);
 
       if (connectedUserSocketId) {
         io.to(connectedUserSocketId).emit('webrtc:answer', {
