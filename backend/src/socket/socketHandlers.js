@@ -414,7 +414,15 @@ function createSocketHandlers(io) {
       }
 
       const { offer, type } = data; // type: 'audio' or 'video'
+      logger.debug(`🔍 WebRTC Offer Debug:`);
+      logger.debug(`   Sender: ${guestSession.username} (${guestSession.id})`);
+      logger.debug(`   Connected user ID: ${guestSession.connectedUser}`);
+      logger.debug(`   Looking up socket for: ${guestSession.connectedUser}`);
+      logger.debug(`   userSockets Map has ${userSockets.size} entries`);
+      logger.debug(`   userSockets keys: ${Array.from(userSockets.keys()).join(', ')}`);
+      
       const connectedUserSocketId = userSockets.get(guestSession.connectedUser);
+      logger.debug(`   Found socket ID: ${connectedUserSocketId || 'NOT FOUND'}`);
 
       if (connectedUserSocketId) {
         io.to(connectedUserSocketId).emit('webrtc:offer', {
@@ -426,6 +434,8 @@ function createSocketHandlers(io) {
 
         logger.info(`WebRTC offer sent: ${guestSession.username} -> ${guestSession.connectedUser} (${type})`);
       } else {
+        logger.error(`❌ WebRTC offer failed: Could not find socket for ${guestSession.connectedUser}`);
+        logger.error(`   Available sockets: ${Array.from(userSockets.entries()).map(([k,v]) => `${k}=${v}`).join(', ')}`);
         socket.emit('webrtc:error', { message: 'Connected user is not available' });
       }
 
@@ -446,7 +456,9 @@ function createSocketHandlers(io) {
       }
 
       const { answer } = data;
+      logger.debug(`🔍 WebRTC Answer Debug: ${guestSession.username} -> ${guestSession.connectedUser}`);
       const connectedUserSocketId = userSockets.get(guestSession.connectedUser);
+      logger.debug(`   Socket ID lookup result: ${connectedUserSocketId || 'NOT FOUND'}`);
 
       if (connectedUserSocketId) {
         io.to(connectedUserSocketId).emit('webrtc:answer', {
@@ -457,6 +469,7 @@ function createSocketHandlers(io) {
 
         logger.info(`WebRTC answer sent: ${guestSession.username} -> ${guestSession.connectedUser}`);
       } else {
+        logger.error(`❌ WebRTC answer failed: Could not find socket for ${guestSession.connectedUser}`);
         socket.emit('webrtc:error', { message: 'Connected user is not available' });
       }
 
@@ -487,6 +500,7 @@ function createSocketHandlers(io) {
 
         logger.debug(`ICE candidate sent: ${guestSession.username} -> ${guestSession.connectedUser}`);
       } else {
+        logger.error(`❌ ICE candidate failed: Could not find socket for ${guestSession.connectedUser}`);
         socket.emit('webrtc:error', { message: 'Connected user is not available' });
       }
 
