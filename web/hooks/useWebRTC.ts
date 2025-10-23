@@ -67,9 +67,11 @@ const useWebRTC = (props?: UseWebRTCProps) => {
   };
 
   useEffect(() => {
+    console.log("🔌 Setting up WebRTC socket listeners...");
     setupSocketListeners();
     return () => {
-      // Remove socket listeners to prevent memory leaks
+      console.log("🧹 Cleaning up WebRTC socket listeners...");
+      // Remove socket listeners to prevent memory leaks and duplicate handlers
       socketService.off("webrtc:offer", handleReceiveOffer);
       socketService.off("webrtc:answer", handleReceiveAnswer);
       socketService.off("webrtc:ice-candidate", handleReceiveIceCandidate);
@@ -81,12 +83,22 @@ const useWebRTC = (props?: UseWebRTCProps) => {
   }, []);
 
   const setupSocketListeners = (): void => {
+    // Remove any existing listeners first to prevent duplicates
+    socketService.off("webrtc:offer", handleReceiveOffer);
+    socketService.off("webrtc:answer", handleReceiveAnswer);
+    socketService.off("webrtc:ice-candidate", handleReceiveIceCandidate);
+    socketService.off("webrtc:call-end", handleReceiveCallEnd);
+    socketService.off("webrtc:call-reject", handleReceiveCallReject);
+    socketService.off("webrtc:call-timeout", handleReceiveCallTimeout);
+    
+    // Add fresh listeners
     socketService.on("webrtc:offer", handleReceiveOffer);
     socketService.on("webrtc:answer", handleReceiveAnswer);
     socketService.on("webrtc:ice-candidate", handleReceiveIceCandidate);
     socketService.on("webrtc:call-end", handleReceiveCallEnd);
     socketService.on("webrtc:call-reject", handleReceiveCallReject);
     socketService.on("webrtc:call-timeout", handleReceiveCallTimeout);
+    console.log("✅ WebRTC socket listeners registered");
   };
 
   const createPeerConnection = (): RTCPeerConnection => {
@@ -637,8 +649,26 @@ const useWebRTC = (props?: UseWebRTCProps) => {
 
   const handleReceiveOffer = async (data: IncomingCallData): Promise<void> => {
     console.log("📞 Received WebRTC offer:", data);
+    console.log(`   From: ${data.fromUsername} (${data.from})`);
+    console.log(`   Type: ${data.type}`);
+    console.log(`   Current call state: ${callState}`);
+    
+    // If we're already in a call, ignore the new offer
+    if (isCallActive || callState !== "idle") {
+      console.warn("⚠️ Ignoring incoming call - already in a call");
+      return;
+    }
+    
+    // Clean up any previous state before accepting new call
+    if (peerConnection.current) {
+      console.log("🧹 Cleaning up previous peer connection before new call");
+      peerConnection.current.close();
+      peerConnection.current = null;
+    }
+    
     setIsIncomingCall(true);
     setIncomingCallData(data);
+    console.log("✅ Incoming call state set, waiting for user to accept/reject");
   };
 
   const handleReceiveAnswer = async (data: {
@@ -888,22 +918,38 @@ const useWebRTC = (props?: UseWebRTCProps) => {
   const cleanup = (): void => {
     console.log("🧹 Cleaning up WebRTC resources...");
 
-    // Stop all local stream tracks using MediaUtils
-    MediaUtils.stopMediaStream(localStream);
+    // Stop all local stream tracks
+    if (localStream) {
+      console.log("🛑 Stopping local stream tracks...");
+      localStream.getTracks().forEach(track => {
+        console.log(`   Stopping ${track.kind} track (readyState: ${track.readyState})`);
+        track.stop();
+        console.log(`   ✅ ${track.kind} track stopped (readyState: ${track.readyState})`);
+      });
+    }
     setLocalStream(null);
 
-    // Stop all remote stream tracks using MediaUtils
-    MediaUtils.stopMediaStream(remoteStream);
+    // Stop all remote stream tracks
+    if (remoteStream) {
+      console.log("🛑 Stopping remote stream tracks...");
+      remoteStream.getTracks().forEach(track => {
+        console.log(`   Stopping ${track.kind} track`);
+        track.stop();
+      });
+    }
     setRemoteStream(null);
 
     // Close and cleanup peer connection
     if (peerConnection.current) {
       console.log("Closing peer connection");
 
-      // Remove event listeners to prevent callbacks during cleanup
+      // Remove all event listeners to prevent callbacks during cleanup
       peerConnection.current.onicecandidate = null;
       peerConnection.current.ontrack = null;
       peerConnection.current.onconnectionstatechange = null;
+      peerConnection.current.oniceconnectionstatechange = null;
+      peerConnection.current.onicegatheringstatechange = null;
+      peerConnection.current.onsignalingstatechange = null;
 
       // Close the connection
       if (peerConnection.current.connectionState !== "closed") {
@@ -932,9 +978,11 @@ const useWebRTC = (props?: UseWebRTCProps) => {
     setCallType(null);
     setCallState("idle");
     setIsCaller(false);
+    setMediaError(null);
+    setIsRequestingPermissions(false);
     resetCallTimer();
 
-    console.log("WebRTC cleanup completed");
+    console.log("✅ WebRTC cleanup completed - all tracks stopped");
   };
 
   return {

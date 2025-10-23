@@ -117,7 +117,7 @@ export default function VideoCallModal({
       console.log('📺 VideoCallModal: No remote stream available yet')
       setIsRemoteVideoEnabled(true) // Reset to default
     }
-  }, [remoteStream, remoteVideoRef, isRemoteVideoEnabled])
+  }, [remoteStream, remoteVideoRef])
 
   const handleEndCall = () => {
     endCall()
