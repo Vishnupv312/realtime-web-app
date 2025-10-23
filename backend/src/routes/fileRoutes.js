@@ -4,10 +4,12 @@ const { uploadFile, uploadVoice } = require('../controllers/fileController');
 const { uploadSingle } = require('../middleware/upload');
 const { uploadLimiter } = require('../middleware/security');
 const { validateFileMetadata, validateVoiceNote } = require('../middleware/validation');
+const { authenticateToken } = require('../middleware/auth');
 
 // Route for general file uploads
 router.post('/upload', 
     uploadLimiter,
+    authenticateToken,
     uploadSingle(), // parse multipart first so req.body has fields
     validateFileMetadata,
     uploadFile
@@ -16,6 +18,7 @@ router.post('/upload',
 // Route for voice note uploads
 router.post('/voice',
     uploadLimiter,
+    authenticateToken,
     uploadSingle(), // parse multipart first so req.body has fields
     validateVoiceNote,
     uploadVoice

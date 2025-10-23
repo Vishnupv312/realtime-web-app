@@ -138,6 +138,20 @@ export default function VideoCallModal({
         return ""
     }
   }
+  
+  const getCallStateColor = () => {
+    switch (callState) {
+      case "calling":
+      case "ringing":
+        return "text-yellow-400"
+      case "connecting":
+        return "text-blue-400"
+      case "connected":
+        return "text-green-400"
+      default:
+        return "text-gray-400"
+    }
+  }
 
   if (!isOpen) return null
 
@@ -205,7 +219,7 @@ export default function VideoCallModal({
                     </AvatarFallback>
                   </Avatar>
                   <h2 className="text-white text-xl sm:text-3xl font-light mb-2">{connectedUser?.username}</h2>
-                  <p className="text-gray-300 text-sm sm:text-lg mb-4">{getCallStateText()}</p>
+                  <p className={`text-sm sm:text-lg mb-4 ${getCallStateColor()}`}>{getCallStateText()}</p>
                   {callState === "ringing" && (
                     <motion.div
                       animate={{ scale: [1, 1.1, 1] }}
@@ -261,11 +275,15 @@ export default function VideoCallModal({
                   </Avatar>
                   <div>
                     <h3 className="text-white font-medium text-sm sm:text-base">{connectedUser?.username}</h3>
-                    <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-gray-300">
+                    <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm">
                       <div className={`w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${
-                        callState === "connected" ? "bg-green-400" : "bg-yellow-400"
+                        callState === "connected" 
+                          ? "bg-green-400" 
+                          : callState === "connecting" 
+                            ? "bg-blue-400" 
+                            : "bg-yellow-400"
                       } animate-pulse`}></div>
-                      <span>{getCallStateText()}</span>
+                      <span className={getCallStateColor()}>{getCallStateText()}</span>
                     </div>
                   </div>
                 </div>

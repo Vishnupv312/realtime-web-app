@@ -1,5 +1,5 @@
 const { v4: uuidv4 } = require('uuid');
-const { logger } = require('../config/database');
+const { logger } = require('../config/logger');
 
 // In-memory storage for temporary files
 const tempFiles = new Map(); // fileId -> { buffer, mimetype, originalName, roomId, createdAt, expiresAt }

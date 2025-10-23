@@ -1,8 +1,8 @@
 const { verifyToken, extractTokenFromHeader } = require('../utils/jwt');
-const User = require('../models/User');
-const { logger } = require('../config/database');
+const { getGuestBySessionId } = require('../controllers/guestController');
+const { logger } = require('../config/logger');
 
-// Middleware to authenticate and authorize requests
+// Middleware to authenticate and authorize guest requests only
 const authenticateToken = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
@@ -17,18 +17,32 @@ const authenticateToken = async (req, res, next) => {
 
     const decoded = verifyToken(token);
     
-    // Find user and check if still exists
-    const user = await User.findById(decoded.userId).select('-password');
-    if (!user) {
+    // Only accept guest sessions
+    if (!decoded.isGuest || !decoded.sessionId) {
       return res.status(401).json({
         success: false,
-        message: 'User not found'
+        message: 'Only guest sessions are supported'
       });
     }
 
-    // Add user info to request object
-    req.user = user;
-    req.userId = user._id;
+    const guestSession = await getGuestBySessionId(decoded.sessionId);
+    if (!guestSession) {
+      return res.status(401).json({
+        success: false,
+        message: 'Guest session not found or expired'
+      });
+    }
+    
+    // Add guest info to request object
+    req.user = {
+      id: guestSession.id,
+      username: guestSession.username,
+      isGuest: true,
+      sessionId: guestSession.sessionId
+    };
+    req.userId = guestSession.id;
+    req.sessionId = guestSession.sessionId;
+    req.isGuest = true;
     
     next();
   } catch (error) {
@@ -41,7 +55,7 @@ const authenticateToken = async (req, res, next) => {
   }
 };
 
-// Middleware for Socket.IO authentication
+// Middleware for Socket.IO authentication (guest-only)
 const authenticateSocket = async (socket, next) => {
   try {
     const token = socket.handshake.auth.token || socket.handshake.query.token;
@@ -52,15 +66,26 @@ const authenticateSocket = async (socket, next) => {
 
     const decoded = verifyToken(token);
     
-    // Find user and check if still exists
-    const user = await User.findById(decoded.userId).select('-password');
-    if (!user) {
-      return next(new Error('User not found'));
+    // Only accept guest sessions
+    if (!decoded.isGuest || !decoded.sessionId) {
+      return next(new Error('Only guest sessions are supported'));
     }
 
-    // Add user info to socket object
-    socket.user = user;
-    socket.userId = user._id.toString();
+    const guestSession = await getGuestBySessionId(decoded.sessionId);
+    if (!guestSession) {
+      return next(new Error('Guest session not found or expired'));
+    }
+    
+    // Add guest info to socket object
+    socket.user = {
+      id: guestSession.id,
+      username: guestSession.username,
+      isGuest: true,
+      sessionId: guestSession.sessionId
+    };
+    socket.userId = guestSession.id;
+    socket.sessionId = guestSession.sessionId;
+    socket.isGuest = true;
     
     next();
   } catch (error) {

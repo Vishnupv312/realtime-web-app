@@ -3,7 +3,7 @@ const http = require("http");
 const path = require("path");
 require("dotenv").config();
 
-const { connectDB, logger } = require("./config/database");
+const { logger } = require("./config/logger");
 const { createSocketServer } = require("./socket/socketServer");
 
 // Import middleware
@@ -25,11 +25,11 @@ const { debugCors, permissiveCors } = require("./middleware/cors-debug");
 
 const { cleanupOldFiles } = require("./middleware/upload");
 
-// Import routes
-const authRoutes = require("./routes/auth");
-const userRoutes = require("./routes/users");
+// Import routes  
+const guestRoutes = require("./routes/guest");
 const fileRoutes = require("./routes/fileRoutes");
 const tempFileRoutes = require("./routes/tempFileRoutes");
+const statsRoutes = require("./routes/stats");
 
 function createApp() {
   const app = express();
@@ -71,17 +71,17 @@ function createApp() {
   return app;
 }
 
-async function initializeDatabase() {
+
+async function initializeRedis() {
   try {
-    await connectDB();
-    logger.info("Database initialized successfully");
+    const redisGuestManager = require('./utils/redisGuestManager');
+    await redisGuestManager.initialize();
+    logger.info("Redis guest manager initialized successfully");
+    return true;
   } catch (error) {
-    logger.error("Database initialization failed:", error);
-    // Exit gracefully without triggering error cascade
-    setTimeout(() => {
-      process.exit(1);
-    }, 1000);
-    throw error;
+    logger.error("Redis initialization failed:", error.message || error);
+    logger.warn("Continuing without Redis - using fallback storage");
+    return false;
   }
 }
 
@@ -109,10 +109,10 @@ function initializeRoutes(app, socketApi) {
   });
 
   // API routes with rate limiting
-  app.use("/api/auth", authLimiter, authRoutes);
-  app.use("/api/users", apiLimiter, userRoutes);
+  app.use("/api/guest", apiLimiter, guestRoutes);
   app.use("/api/files", apiLimiter, fileRoutes);
   app.use("/api/temp-files", tempFileRoutes); // No rate limiting for file serving
+  app.use("/api/stats", apiLimiter, statsRoutes);
 
   // Socket.IO health check
   app.get("/api/socket/stats", apiLimiter, (req, res) => {
@@ -147,19 +147,43 @@ function initializeErrorHandling(app, server) {
   const gracefulShutdown = (signal) => {
     logger.info(`${signal} received, starting graceful shutdown`);
 
-    server.close(() => {
-      logger.info("HTTP server closed");
-      const mongoose = require("mongoose");
-      mongoose.connection.close(() => {
-        logger.info("Database connection closed");
-        process.exit(0);
-      });
-    });
+    // Prevent multiple shutdown attempts
+    if (gracefulShutdown.inProgress) {
+      return;
+    }
+    gracefulShutdown.inProgress = true;
 
+    const shutdown = async () => {
+      try {
+        // Close HTTP server
+        if (server) {
+          server.close();
+          logger.info("HTTP server closed");
+        }
+        
+        // Close Redis connection
+        try {
+          const redisGuestManager = require('./utils/redisGuestManager');
+          await redisGuestManager.close();
+        } catch (error) {
+          logger.error("Error closing Redis connection:", error);
+        }
+        
+        
+        process.exit(0);
+      } catch (error) {
+        logger.error("Error during graceful shutdown:", error);
+        process.exit(1);
+      }
+    };
+
+    shutdown();
+
+    // Force exit after timeout
     setTimeout(() => {
       logger.error("Forced shutdown due to timeout");
       process.exit(1);
-    }, 10000);
+    }, 5000); // Reduced timeout
   };
 
   // Handle uncaught exceptions
@@ -213,11 +237,11 @@ function startServer() {
   initializeErrorHandling(app, httpServer);
   startCleanupTasks();
 
-  // Initialize database asynchronously (non-blocking)
-  initializeDatabase().catch((err) => {
+  // Initialize Redis manager asynchronously (non-blocking)
+  initializeRedis().catch((err) => {
     logger.warn(
-      "Database initialization failed, continuing without database:",
-      err.message
+      "Redis initialization failed, using fallback storage:",
+      err.message || 'Unknown error'
     );
   });
 

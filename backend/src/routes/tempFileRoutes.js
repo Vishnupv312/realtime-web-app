@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const tempFileStorage = require("../utils/tempFileStorage");
-const { logger } = require("../config/database");
+const { logger } = require('../config/logger');
 
 // Serve temporary file by ID
 router.get("/temp/:fileId", (req, res) => {

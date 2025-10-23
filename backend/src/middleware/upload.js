@@ -2,7 +2,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
-const { logger } = require('../config/database');
+const { logger } = require('../config/logger');
 
 // Ensure upload directory exists
 const uploadDir = process.env.UPLOAD_PATH || './uploads';

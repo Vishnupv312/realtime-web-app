@@ -10,14 +10,6 @@ import { motion } from "framer-motion"
 export default function HomePage() {
   const router = useRouter()
 
-  useEffect(() => {
-    // Check if user is already authenticated
-    const token = localStorage.getItem("authToken")
-    if (token) {
-      router.push("/dashboard")
-    }
-  }, [router])
-
   const features = [
     {
       icon: MessageCircle,
@@ -55,16 +47,15 @@ export default function HomePage() {
             <span className="text-blue-600 dark:text-blue-400"> Instantly</span>
           </h1>
           <p className="text-xl text-gray-600 dark:text-gray-300 mb-8 max-w-2xl mx-auto text-pretty">
-            Experience seamless real-time communication with random users worldwide. Chat, call, and connect in a
-            modern, secure environment.
+            Experience seamless real-time communication with random users worldwide. No signup required - start chatting instantly!
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" onClick={() => router.push("/register")} className="text-lg px-8 py-3">
-              Get Started
+            <Button size="lg" onClick={() => router.push("/chat")} className="text-lg px-8 py-3">
+              Start Chatting Now
             </Button>
-            <Button variant="outline" size="lg" onClick={() => router.push("/login")} className="text-lg px-8 py-3">
-              Sign In
+            <Button variant="outline" size="lg" onClick={() => router.push("/match")} className="text-lg px-8 py-3">
+              Find Random Match
             </Button>
           </div>
         </motion.div>
@@ -111,13 +102,23 @@ export default function HomePage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button
-                size="lg"
-                onClick={() => router.push("/register")}
-                className="w-full sm:w-auto text-lg px-12 py-3"
-              >
-                Start Chatting Now
-              </Button>
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                <Button
+                  size="lg"
+                  onClick={() => router.push("/chat")}
+                  className="text-lg px-12 py-3"
+                >
+                  Start Chatting
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={() => router.push("/match")}
+                  className="text-lg px-12 py-3"
+                >
+                  Find a Match
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </motion.div>

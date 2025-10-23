@@ -3,8 +3,8 @@
 import type React from "react";
 
 import { useState, useEffect, useRef } from "react";
-import { useAuth } from "@/contexts/AuthContext";
 import { useChat } from "@/contexts/ChatContext";
+import { useGuestSession } from "@/contexts/GuestSessionContext";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,13 +36,14 @@ import {
   ArrowLeft,
   MapPin,
   Loader2,
+  X,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { fileAPI } from "@/lib/api";
-import ProtectedRoute from "@/components/ProtectedRoute";
 import useWebRTC from "@/hooks/useWebRTC";
 import VideoCallModal from "@/components/VideoCallModal";
 import FilePreview from "@/components/FilePreview";
+import GuestUsernameModal from "@/components/GuestUsernameModal";
 
 interface FileUploadProgress {
   file: File;
@@ -51,7 +52,7 @@ interface FileUploadProgress {
 }
 
 export default function ChatPage() {
-  const { user, logout } = useAuth();
+  const { guestUser, initializeGuestSession, clearGuestSession, isRegenerating } = useGuestSession();
   const {
     isConnected,
     connectedUser,
@@ -86,7 +87,7 @@ export default function ChatPage() {
     endCall,
   } = useWebRTC({
     connectedUser,
-    currentUserId: user?.id,
+    currentUserId: guestUser?.id,
     addSystemMessage,
   });
   const router = useRouter();
@@ -96,6 +97,9 @@ export default function ChatPage() {
   const [fileUpload, setFileUpload] = useState<FileUploadProgress | null>(null);
   const [showMatchDialog, setShowMatchDialog] = useState(false);
   const [showCallModal, setShowCallModal] = useState(false);
+  const [isTypingMode, setIsTypingMode] = useState(false);
+  const [scrollLocked, setScrollLocked] = useState(false);
+  const [showUsernameModal, setShowUsernameModal] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -103,6 +107,27 @@ export default function ChatPage() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingStartRef = useRef<number | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const lastMessagesLengthRef = useRef(0);
+  const isNearBottomRef = useRef(true);
+  const scrollTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Initialize guest session if not exists
+  useEffect(() => {
+    if (!guestUser) {
+      setShowUsernameModal(true);
+    }
+  }, [guestUser]);
+
+  const handleUsernameComplete = async (username: string) => {
+    try {
+      await initializeGuestSession(username);
+      setShowUsernameModal(false);
+    } catch (error) {
+      console.error('Failed to initialize guest session:', error);
+      // Keep modal open on error so user can retry
+    }
+  };
 
   // Handle dynamic viewport height for mobile browsers (especially iOS Safari)
   useEffect(() => {
@@ -111,18 +136,75 @@ export default function ChatPage() {
       document.documentElement.style.setProperty('--vh', `${vh}px`);
     };
     
+    const handleResize = () => {
+      setVH();
+      // Small delay to allow keyboard to settle
+      setTimeout(checkIfNearBottom, 200);
+    };
+    
+    const handleOrientationChange = () => {
+      setVH();
+      // Force scroll check after orientation change
+      setTimeout(() => {
+        checkIfNearBottom();
+        if (isNearBottomRef.current && messages.length > 0) {
+          scrollToBottom(false);
+        }
+      }, 500);
+    };
+    
     setVH();
-    window.addEventListener('resize', setVH);
-    window.addEventListener('orientationchange', setVH);
+    window.addEventListener('resize', handleResize);
+    window.addEventListener('orientationchange', handleOrientationChange);
+    
+    // Handle virtual keyboard on mobile
+    const handleVisualViewportChange = () => {
+      if (window.visualViewport) {
+        // Delay to prevent scroll jank during keyboard animation
+        setTimeout(() => {
+          if (isNearBottomRef.current && messages.length > 0) {
+            scrollToBottom(false);
+          }
+        }, 150);
+      }
+    };
+    
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', handleVisualViewportChange);
+    }
     
     return () => {
-      window.removeEventListener('resize', setVH);
-      window.removeEventListener('orientationchange', setVH);
+      window.removeEventListener('resize', handleResize);
+      window.removeEventListener('orientationchange', handleOrientationChange);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener('resize', handleVisualViewportChange);
+      }
     };
-  }, []);
+  }, [messages.length]);
 
+  // Intelligent scroll management - only scroll when necessary
   useEffect(() => {
-    scrollToBottom();
+    const messagesContainer = messagesContainerRef.current;
+    if (!messagesContainer) return;
+
+    // Check if we should auto-scroll
+    const shouldAutoScroll = 
+      messages.length > lastMessagesLengthRef.current && // New message added
+      isNearBottomRef.current && // User is near bottom
+      messages.length > 0; // Has messages
+
+    if (shouldAutoScroll) {
+      // Debounce scroll to prevent excessive scrolling
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      
+      scrollTimeoutRef.current = setTimeout(() => {
+        scrollToBottom(false); // Smooth scroll for new messages
+      }, 100);
+    }
+
+    lastMessagesLengthRef.current = messages.length;
   }, [messages]);
 
   useEffect(() => {
@@ -169,8 +251,52 @@ export default function ChatPage() {
     // };
   }, [connectedUser, leaveRoom]);
 
-  const scrollToBottom = (): void => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  // Handle ESC key press to exit chat
+  useEffect(() => {
+    const handleEscapeKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        if (connectedUser) {
+          // Exit the current chat
+          leaveRoom?.();
+        }
+        // Return to home page
+        router.push("/");
+      }
+    };
+
+    // Add event listener
+    document.addEventListener("keydown", handleEscapeKey);
+
+    // Cleanup event listener
+    return () => {
+      document.removeEventListener("keydown", handleEscapeKey);
+    };
+  }, [connectedUser, leaveRoom, router]);
+
+  const scrollToBottom = (smooth: boolean = true): void => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ 
+        behavior: smooth ? "smooth" : "auto",
+        block: "end"
+      });
+    }
+  };
+
+  // Check if user is near bottom of messages
+  const checkIfNearBottom = (): void => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    
+    const threshold = 100; // pixels from bottom
+    const isNearBottom = 
+      container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+    
+    isNearBottomRef.current = isNearBottom;
+  };
+
+  // Handle scroll events to track user position
+  const handleScroll = (): void => {
+    checkIfNearBottom();
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -180,21 +306,123 @@ export default function ChatPage() {
     sendMessage(messageInput.trim());
     setMessageInput("");
     stopTyping();
+    
+    // Clear typing mode and unlock scroll
+    setIsTypingMode(false);
+    setScrollLocked(false);
+    
+    // Always scroll to bottom when user sends a message
+    isNearBottomRef.current = true;
+    setTimeout(() => scrollToBottom(true), 50);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setMessageInput(e.target.value);
+    const newValue = e.target.value;
+    setMessageInput(newValue);
 
-    // Handle typing indicators
-    if (e.target.value.trim()) {
+    // Enable typing mode to prevent scrolling
+    if (!isTypingMode && newValue.length > 0) {
+      setIsTypingMode(true);
+      setScrollLocked(true);
+    }
+
+    // Handle typing indicators without affecting scroll
+    if (newValue.trim()) {
       startTyping();
       clearTimeout(typingTimeoutRef.current);
       typingTimeoutRef.current = setTimeout(() => {
         stopTyping();
-      }, 1000);
+        setIsTypingMode(false);
+        setScrollLocked(false);
+      }, 1500); // Longer timeout to prevent flickering
     } else {
       stopTyping();
+      setIsTypingMode(false);
+      setScrollLocked(false);
     }
+  };
+
+  // Handle input focus to ensure proper keyboard behavior
+  const handleInputFocus = () => {
+    // Enable typing mode to prevent scroll interference
+    setIsTypingMode(true);
+    setScrollLocked(true);
+    
+    // Mark that user is actively typing to prevent unwanted scrolling
+    isNearBottomRef.current = true;
+    
+    // Mobile-specific handling
+    if (window.innerWidth <= 768) {
+      // Add keyboard-visible class for CSS targeting
+      document.documentElement.classList.add('keyboard-visible');
+      
+      // Prevent any scroll adjustment during keyboard animation
+      const container = messagesContainerRef.current;
+      if (container) {
+        // Store current scroll position to prevent jumping
+        const currentScrollTop = container.scrollTop;
+        
+        // Temporarily lock scroll position during keyboard transition
+        container.style.overflow = 'hidden';
+        container.scrollTop = currentScrollTop;
+        
+        // Re-enable scrolling after keyboard animation
+        setTimeout(() => {
+          container.style.overflow = 'auto';
+          // Only adjust if we were at bottom
+          const isAtBottom = currentScrollTop + container.clientHeight >= container.scrollHeight - 10;
+          if (isAtBottom) {
+            container.scrollTop = container.scrollHeight - container.clientHeight;
+          }
+        }, 300);
+      }
+      return;
+    }
+    
+    // Desktop behavior
+    setTimeout(() => {
+      if (messages.length > 0 && !scrollLocked) {
+        const container = messagesContainerRef.current;
+        if (container) {
+          const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
+          if (isAtBottom) {
+            container.scrollTop = container.scrollHeight - container.clientHeight;
+          }
+        }
+      }
+    }, 150);
+  };
+  
+  // Handle input blur to re-enable scrolling
+  const handleInputBlur = () => {
+    // Remove keyboard-visible class
+    document.documentElement.classList.remove('keyboard-visible');
+    
+    setTimeout(() => {
+      if (messageInput.trim() === '') {
+        setIsTypingMode(false);
+        setScrollLocked(false);
+      }
+      
+      // Mobile-specific cleanup
+      if (window.innerWidth <= 768) {
+        const container = messagesContainerRef.current;
+        if (container) {
+          // Ensure scrolling is re-enabled
+          container.style.overflow = 'auto';
+          
+          // Gentle scroll to bottom if needed
+          setTimeout(() => {
+            if (isNearBottomRef.current) {
+              const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
+              if (!isAtBottom) {
+                container.scrollTop = container.scrollHeight - container.clientHeight;
+              }
+            }
+          }, 100);
+        }
+      }
+    }, 100);
   };
 
   const handleFileUpload = async (file: File) => {
@@ -323,6 +551,13 @@ export default function ChatPage() {
     return "document";
   };
 
+  const handleExitChat = () => {
+    if (connectedUser) {
+      leaveRoom?.();
+    }
+    router.push("/");
+  };
+
   const getInitials = (name: string) => {
     return name
       .split(" ")
@@ -340,6 +575,7 @@ export default function ChatPage() {
   };
 
   const renderMessage = (message: any, index: number) => {
+    const currentUser = guestUser;
     // Handle system messages differently (centered)
     if (
       message.senderId === "system" ||
@@ -362,7 +598,7 @@ export default function ChatPage() {
     }
 
     // Regular user messages
-    const isOwn = message.senderId === user?.id;
+    const isOwn = message.senderId === currentUser?.id;
     const showAvatar =
       index === 0 || messages[index - 1]?.senderId !== message.senderId;
 
@@ -372,7 +608,7 @@ export default function ChatPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className={`flex gap-3 ${isOwn ? "flex-row-reverse" : "flex-row"} ${
+        className={`message-item flex gap-3 ${isOwn ? "flex-row-reverse" : "flex-row"} ${
           showAvatar ? "mt-4" : "mt-1"
         }`}
       >
@@ -417,17 +653,19 @@ export default function ChatPage() {
                 return true; // Always render file messages for debugging
               })() &&
               (message.content.tempUrl && message.content.downloadUrl ? (
-                <FilePreview
-                  filename={message.content.filename || "Unknown file"}
-                  tempUrl={message.content.tempUrl}
-                  downloadUrl={message.content.downloadUrl}
-                  fileType={message.content.fileType}
-                  fileSize={message.content.fileSize}
-                  isImage={message.content.isImage}
-                  fileTypeCategory={message.content.fileTypeCategory}
-                  expiresAt={message.content.expiresAt}
-                  className="max-w-full"
-                />
+                <div className="file-preview-container">
+                  <FilePreview
+                    filename={message.content.filename || "Unknown file"}
+                    tempUrl={message.content.tempUrl}
+                    downloadUrl={message.content.downloadUrl}
+                    fileType={message.content.fileType}
+                    fileSize={message.content.fileSize}
+                    isImage={message.content.isImage}
+                    fileTypeCategory={message.content.fileTypeCategory}
+                    expiresAt={message.content.expiresAt}
+                    className="max-w-full"
+                  />
+                </div>
               ) : (
                 <div className="p-3 bg-red-100 border border-red-300 rounded">
                   <p className="text-red-700 text-sm">File message (Debug)</p>
@@ -525,20 +763,48 @@ export default function ChatPage() {
     );
   };
 
+  // Show loading state while guest session is being initialized
+  if (!guestUser && !showUsernameModal) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center"
+        >
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">
+            Preparing your chat session...
+          </p>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
-    <ProtectedRoute>
-      <div className="mobile-screen flex flex-col bg-white dark:bg-gray-900 overflow-hidden">
+    <>
+      <div className="chat-container mobile-screen bg-white dark:bg-gray-900">
+        {/* Session Regeneration Banner */}
+        {isRegenerating && (
+          <div className="bg-yellow-100 dark:bg-yellow-900 border-b border-yellow-200 dark:border-yellow-800 px-4 py-2">
+            <div className="flex items-center justify-center gap-2 text-yellow-800 dark:text-yellow-200">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              <span className="text-sm">Reconnecting session...</span>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <header className="border-b bg-white dark:bg-gray-900 px-3 py-2 sm:px-4 sm:py-3 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Button
+                <Button
                 variant="ghost"
                 size="sm"
                 className="h-8 w-8 sm:h-9 sm:w-9 p-0"
                 onClick={() => {
                   leaveRoom?.();
-                  router.push("/dashboard");
+                  router.push("/");
                 }}
               >
                 <ArrowLeft className="w-4 h-4" />
@@ -604,6 +870,15 @@ export default function ChatPage() {
                   >
                     <Video className="w-4 h-4" />
                   </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleExitChat}
+                    className="h-8 w-8 sm:h-9 sm:w-9 p-0 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    title="Exit Chat (ESC)"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
                 </>
               )}
 
@@ -626,16 +901,25 @@ export default function ChatPage() {
                     </DropdownMenuItem>
                   )}
                   {connectedUser && (
-                    <DropdownMenuItem onClick={clearChat}>
-                      <Trash2 className="mr-2 h-4 w-4" />
-                      Clear Chat
-                    </DropdownMenuItem>
+                    <>
+                      <DropdownMenuItem onClick={clearChat}>
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Clear Chat
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={handleExitChat} className="text-red-600 dark:text-red-400">
+                        <X className="mr-2 h-4 w-4" />
+                        Exit Chat (ESC)
+                      </DropdownMenuItem>
+                    </>
                   )}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => router.push("/dashboard")}>
-                    Dashboard
+                  <DropdownMenuItem onClick={() => router.push("/match")}>
+                    Find New Match
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={logout}>Logout</DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => {
+                    clearGuestSession();
+                    router.push("/");
+                  }}>Change Username</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -643,7 +927,15 @@ export default function ChatPage() {
         </header>
 
         {/* Messages Area */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-2 sm:px-4 sm:py-4 space-y-2 min-h-0">
+        <div 
+          ref={messagesContainerRef}
+          className={`chat-messages message-list ${
+            scrollLocked ? 'scroll-locked' : ''
+          } ${
+            isTypingMode ? 'typing-mode' : ''
+          }`}
+          onScroll={scrollLocked ? undefined : handleScroll}
+        >
           {!connectedUser && !isMatching && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -702,9 +994,18 @@ export default function ChatPage() {
           <div ref={messagesEndRef} />
         </div>
 
+        {/* Keyboard Shortcut Hint - only show when connected */}
+        {connectedUser && (
+          <div className="px-3 py-1 text-center">
+            <p className="text-xs text-gray-400 dark:text-gray-600">
+              Press <kbd className="px-1 py-0.5 text-xs font-mono bg-gray-100 dark:bg-gray-800 rounded">ESC</kbd> to exit chat
+            </p>
+          </div>
+        )}
+
         {/* Input Area */}
         {connectedUser && (
-          <div className="border-t bg-white dark:bg-gray-900 px-3 py-2 sm:px-4 sm:py-4 flex-shrink-0">
+          <div className="chat-input-area chat-input-container px-3 py-3 sm:px-4 sm:py-4 dark:bg-gray-900">
             {fileUpload && (
               <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                 <div className="flex items-center justify-between">
@@ -749,9 +1050,19 @@ export default function ChatPage() {
                 <Input
                   value={messageInput}
                   onChange={handleInputChange}
+                  onFocus={handleInputFocus}
+                  onBlur={handleInputBlur}
                   placeholder="Type a message..."
-                  className="pr-12"
+                  className="chat-input pr-12"
                   disabled={!!fileUpload}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="sentences"
+                  style={{
+                    fontSize: '16px', // Prevent zoom on iOS Safari
+                    WebkitAppearance: 'none',
+                    borderRadius: '8px'
+                  }}
                 />
                 <Button
                   type="button"
@@ -849,6 +1160,12 @@ export default function ChatPage() {
           endCall={endCall}
         />
       </div>
-    </ProtectedRoute>
+
+      {/* Username Modal */}
+      <GuestUsernameModal
+        isOpen={showUsernameModal}
+        onComplete={handleUsernameComplete}
+      />
+    </>
   );
 }

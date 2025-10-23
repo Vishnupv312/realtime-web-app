@@ -1,45 +1,51 @@
-const User = require('../models/User');
-const { logger } = require('../config/database');
+const { logger } = require('../config/logger');
 const { validateMessage } = require('../middleware/validation');
 const tempFileStorage = require('../utils/tempFileStorage');
+const { updateGuestPresence, getGuestBySessionId, getAllOnlineGuests, getGuestStats } = require('../controllers/guestController');
+const redisGuestManager = require('../utils/redisGuestManager');
 
 // Store active connections in memory (use Redis for production scaling)
 const connectedUsers = new Map(); // socketId -> userId mapping
 const userSockets = new Map(); // userId -> socketId mapping
 
 function createSocketHandlers(io) {
-  // Handle user connection
+  // Handle guest user connection
   async function handleConnection(socket) {
     try {
       const user = socket.user;
-      const userId = user._id.toString();
+      const userId = socket.userId;
+      const sessionId = socket.sessionId;
       
       // Store connection mapping
       connectedUsers.set(socket.id, userId);
       userSockets.set(userId, socket.id);
-
-      // Update user status to online
-      await user.setOnline(socket.id);
+      
+      // Update guest presence in Redis
+      await updateGuestPresence(sessionId, {
+        isOnline: true,
+        socketId: socket.id,
+        connectedAt: new Date().toISOString()
+      });
       
       // Join user to their own room for private messaging
       socket.join(userId);
-
-      logger.info(`User connected: ${user.username} (${userId}) - Socket: ${socket.id}`);
-
-      // Notify other users that this user is online
-      socket.broadcast.emit('user:online', {
-        userId: userId,
-        username: user.username,
-        deviceId: user.deviceId,
-        location: user.location
-      });
-
+      
+      // Increment active user count
+      const activeCount = await redisGuestManager.incrementActiveUserCount();
+      
+      logger.info(`Guest connected: ${user.username} (${userId}) - Socket: ${socket.id}, Active users: ${activeCount}`);
+      
       // Send current user info to client
       socket.emit('connection:established', {
         userId: userId,
         username: user.username,
-        socketId: socket.id
+        socketId: socket.id,
+        isGuest: true,
+        sessionId: sessionId
       });
+      
+      // Broadcast updated statistics to all connected clients
+      await broadcastUserStats();
 
     } catch (error) {
       logger.error('Connection handling error:', error);
@@ -47,208 +53,224 @@ function createSocketHandlers(io) {
     }
   }
 
-  // Handle user disconnection
+  // Handle guest user disconnection
   async function handleDisconnection(socket) {
     try {
       const userId = connectedUsers.get(socket.id);
-      if (!userId) return;
+      const sessionId = socket.sessionId;
+      if (!userId || !sessionId) return;
 
-      const user = await User.findById(userId);
-      if (!user) return;
-
-      // If user was connected to another user, instantly close the room
-      if (user.connectedUser) {
-        const connectedUserId = user.connectedUser.toString();
-        const connectedUserSocketId = userSockets.get(connectedUserId);
-        
-        // Create room ID the same way as in handleUserMatch
-        const roomId = [userId, connectedUserId].sort().join('_');
-        
-        // Instantly close the room and notify the remaining user
+      const guestSession = await getGuestBySessionId(sessionId);
+      if (!guestSession) return;
+      
+      // If guest was in chat, handle disconnection cleanup
+      if (guestSession.connectedUser) {
+        const connectedUserSocketId = userSockets.get(guestSession.connectedUser);
         if (connectedUserSocketId) {
+          // Create room ID
+          const roomId = [guestSession.id, guestSession.connectedUser].sort().join('_');
+          
+          // Notify connected user that guest left
           io.to(connectedUserSocketId).emit('room:closed', {
-            userId: userId,
-            username: user.username,
+            userId: guestSession.id,
+            username: guestSession.username,
             message: `The other user has left. Room closed.`,
             reason: 'user_disconnected'
           });
-
-          // Disconnect the other user too to prevent reconnection
-          const connectedUser = await User.findById(connectedUserId);
-          if (connectedUser) {
-            await connectedUser.disconnect();
+          
+          // Update connected user's status
+          const connectedGuestSessionId = guestSession.connectedUser.replace('guest_', '');
+          await updateGuestPresence(connectedGuestSessionId, {
+            connectedUser: null,
+            inChat: false
+          });
+          
+          // Clean up temporary files for this room
+          const deletedFilesCount = tempFileStorage.deleteRoomFiles(roomId);
+          if (deletedFilesCount > 0) {
+            logger.info(`Cleaned up ${deletedFilesCount} temporary files for room ${roomId}`);
           }
         }
-        
-        // Destroy the room completely
-        io.in(roomId).socketsLeave(roomId);
-        
-        // Clean up temporary files for this room
-        const deletedFilesCount = tempFileStorage.deleteRoomFiles(roomId);
-        if (deletedFilesCount > 0) {
-          logger.info(`Cleaned up ${deletedFilesCount} temporary files for room ${roomId}`);
-        }
-        
-        logger.info(`Room ${roomId} instantly closed due to user ${user.username} disconnection`);
       }
-
-      // Update user status to offline
-      await user.setOffline();
-
+      
+      // Update guest presence to offline
+      await updateGuestPresence(sessionId, {
+        isOnline: false,
+        socketId: null,
+        inChat: false,
+        connectedUser: null
+      });
+      
       // Remove from connection mappings
       connectedUsers.delete(socket.id);
       userSockets.delete(userId);
-
-      logger.info(`User disconnected: ${user.username} (${userId})`);
-
-      // Notify other users that this user is offline
-      socket.broadcast.emit('user:offline', {
-        userId: userId,
-        username: user.username
-      });
+      
+      // Decrement active user count
+      const activeCount = await redisGuestManager.decrementActiveUserCount();
+      
+      logger.info(`Guest disconnected: ${guestSession.username} (${userId}), Active users: ${activeCount}`);
+      
+      // Broadcast updated statistics to all connected clients
+      await broadcastUserStats();
 
     } catch (error) {
       logger.error('Disconnection handling error:', error);
     }
   }
 
-  // Handle user matching request
+  // Handle guest user matching request
   async function handleUserMatch(socket, data) {
     try {
       const userId = socket.userId;
-      const user = await User.findById(userId);
-
-      if (!user) {
-        socket.emit('user:match:error', { message: 'User not found' });
+      const sessionId = socket.sessionId;
+      
+      const guestSession = await getGuestBySessionId(sessionId);
+      if (!guestSession) {
+        socket.emit('user:match:error', { message: 'Guest session not found' });
         return;
       }
-
-      // Set user as searching for a match
-      await user.startSearching();
       
-      // Notify the user that they are now searching
-      socket.emit('user:match:searching', { message: 'Searching for available users' });
-      
-      // Find available users (online, searching, and not connected)
-      const availableUsers = await User.findAvailableUsers(userId);
-      
-      if (availableUsers.length === 0) {
-        // No users available right now, but keep the user in searching state
-        // They will be matched when another user starts searching
-        socket.emit('user:match:no_users', { message: 'No users available for matching. Waiting for someone to join...' });
-        return;
-      }
-
-      // Select random user from those who are also searching
-      const randomIndex = Math.floor(Math.random() * availableUsers.length);
-      const matchedUser = availableUsers[randomIndex];
-
-      // Connect both users
-      logger.info(`Connecting users: ${user.username} -> ${matchedUser.username}`);
-      
-      // Ensure both users are connected before proceeding
-      await Promise.all([
-        user.connectToUser(matchedUser._id),
-        matchedUser.connectToUser(user._id)
-      ]);
-      
-      // Both users are no longer searching
-      await Promise.all([
-        user.stopSearching(),
-        matchedUser.stopSearching()
-      ]);
-      
-      // Refresh user objects to get updated data from database
-      const refreshedUser = await User.findById(user._id);
-      const refreshedMatchedUser = await User.findById(matchedUser._id);
-      
-      logger.info(`Users connected successfully: ${user.username} <-> ${matchedUser.username}`);
-      logger.info(`User ${refreshedUser.username} connected to: ${refreshedUser.connectedUser}`);
-      logger.info(`User ${refreshedMatchedUser.username} connected to: ${refreshedMatchedUser.connectedUser}`);
-
-      const matchedUserSocketId = userSockets.get(matchedUser._id.toString());
-
-      if (matchedUserSocketId) {
-        // Create a unique room ID for these two users
-        const roomId = [userId, matchedUser._id.toString()].sort().join('_');
-        
-        // Join both users to the room
-        socket.join(roomId);
-        io.sockets.sockets.get(matchedUserSocketId)?.join(roomId);
-        
-        // Notify both users about the match
-        const user1MatchData = {
-          matchedUser: {
-            id: matchedUser._id.toString(),
-            username: matchedUser.username,
-            deviceId: matchedUser.deviceId,
-            location: matchedUser.location,
-            ip: matchedUser.ip
-          },
-          roomId: roomId
-        };
-        
-        const user2MatchData = {
-          matchedUser: {
-            id: user._id.toString(),
-            username: user.username,
-            deviceId: user.deviceId,
-            location: user.location,
-            ip: user.ip
-          },
-          roomId: roomId
-        };
-        
-        logger.info(`Sending match data to ${user.username}:`, JSON.stringify(user1MatchData));
-        socket.emit('user:matched', user1MatchData);
-
-        logger.info(`Sending match data to ${matchedUser.username}:`, JSON.stringify(user2MatchData));
-        io.to(matchedUserSocketId).emit('user:matched', user2MatchData);
-        
-        // Notify room that users have joined
-        io.to(roomId).emit('room:user_joined', {
-          userId: user._id,
-          username: user.username,
-          message: `${user.username} has joined the chat`
-        });
-        
-        io.to(roomId).emit('room:user_joined', {
-          userId: matchedUser._id,
-          username: matchedUser.username,
-          message: `${matchedUser.username} has joined the chat`
-        });
-
-        logger.info(`Users matched: ${user.username} <-> ${matchedUser.username} in room ${roomId}`);
-      } else {
-        // If the matched user is no longer available, set this user back to searching
-        await user.stopSearching();
-        socket.emit('user:match:error', { message: 'Selected user is no longer available' });
-      }
+      return await handleGuestMatching(socket, guestSession);
 
     } catch (error) {
       logger.error('User matching error:', error);
-      // Make sure to stop searching in case of error
-      try {
-        const user = await User.findById(socket.userId);
-        if (user) await user.stopSearching();
-      } catch (e) {
-        logger.error('Error stopping user search:', e);
-      }
       socket.emit('user:match:error', { message: 'Matching failed' });
     }
   }
 
-  // Handle chat message
+  // Handle guest user matching
+  async function handleGuestMatching(socket, guestSession) {
+    try {
+      // Set guest as searching
+      await updateGuestPresence(socket.sessionId, {
+        isSearching: true
+      });
+      
+      // Notify the guest that they are now searching
+      socket.emit('user:match:searching', { message: 'Searching for available users' });
+      
+      // Find other available guests who are searching
+      const allOnlineGuests = await getAllOnlineGuests();
+      const availableGuests = allOnlineGuests.filter(guest => 
+        guest.id !== guestSession.id && // Not themselves
+        guest.isSearching && // Must be searching
+        !guest.connectedUser // Must not be connected
+      );
+      
+      if (availableGuests.length === 0) {
+        socket.emit('user:match:no_users', { 
+          message: 'No users available for matching. Waiting for someone to join...' 
+        });
+        return;
+      }
+      
+      // Select random guest from available ones
+      const randomIndex = Math.floor(Math.random() * availableGuests.length);
+      const matchedGuest = availableGuests[randomIndex];
+      const matchedGuestSocketId = userSockets.get(matchedGuest.id);
+      
+      if (!matchedGuestSocketId) {
+        socket.emit('user:match:error', { message: 'Selected user is no longer available' });
+        return;
+      }
+      
+      logger.info(`Matching guests: ${guestSession.username} <-> ${matchedGuest.username}`);
+      
+      // Connect both guests
+      await updateGuestPresence(socket.sessionId, {
+        isSearching: false,
+        inChat: true,
+        connectedUser: matchedGuest.id
+      });
+      
+      // Update matched guest's status
+      await updateGuestPresence(matchedGuest.sessionId, {
+        isSearching: false,
+        inChat: true,
+        connectedUser: guestSession.id
+      });
+      
+      // Create room ID
+      const roomId = [guestSession.id, matchedGuest.id].sort().join('_');
+      
+      // Join both users to the room
+      socket.join(roomId);
+      io.sockets.sockets.get(matchedGuestSocketId)?.join(roomId);
+      
+      // Notify both guests about the match
+      const guestMatchData = {
+        matchedUser: {
+          id: matchedGuest.id,
+          username: matchedGuest.username,
+          isGuest: true,
+          location: matchedGuest.location,
+          gender: matchedGuest.gender,
+          language: matchedGuest.language
+        },
+        roomId: roomId
+      };
+      
+      const matchedGuestMatchData = {
+        matchedUser: {
+          id: guestSession.id,
+          username: guestSession.username,
+          isGuest: true,
+          location: guestSession.location,
+          gender: guestSession.gender,
+          language: guestSession.language
+        },
+        roomId: roomId
+      };
+      
+      socket.emit('user:matched', guestMatchData);
+      io.to(matchedGuestSocketId).emit('user:matched', matchedGuestMatchData);
+      
+      // Notify room that users have joined
+      io.to(roomId).emit('room:user_joined', {
+        userId: guestSession.id,
+        username: guestSession.username,
+        message: `${guestSession.username} has joined the chat`
+      });
+      
+      io.to(roomId).emit('room:user_joined', {
+        userId: matchedGuest.id,
+        username: matchedGuest.username,
+        message: `${matchedGuest.username} has joined the chat`
+      });
+      
+      logger.info(`Guests matched: ${guestSession.username} <-> ${matchedGuest.username} in room ${roomId}`);
+      
+      // Broadcast updated statistics
+      await broadcastUserStats();
+      
+    } catch (error) {
+      logger.error('Guest matching error:', error);
+      socket.emit('user:match:error', { message: 'Matching failed' });
+    }
+  }
+
+  // Handle guest chat message
   async function handleChatMessage(socket, data) {
     try {
-      const userId = socket.userId;
-      const user = await User.findById(userId);
-
-      if (!user || !user.connectedUser) {
+      const sessionId = socket.sessionId;
+      
+      const guestSession = await getGuestBySessionId(sessionId);
+      if (!guestSession || !guestSession.connectedUser) {
         socket.emit('chat:error', { message: 'You are not connected to any user' });
         return;
       }
+      
+      return await handleGuestChatMessage(socket, guestSession, data);
 
+    } catch (error) {
+      logger.error('Chat message error:', error);
+      socket.emit('chat:error', { message: 'Failed to send message' });
+    }
+  }
+
+  // Handle guest chat message
+  async function handleGuestChatMessage(socket, guestSession, data) {
+    try {
       const { type, content, timestamp } = data;
 
       // Validate message based on type
@@ -274,14 +296,14 @@ function createSocketHandlers(io) {
 
       const messageData = {
         id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        senderId: userId,
-        senderUsername: user.username,
+        senderId: guestSession.id,
+        senderUsername: guestSession.username,
         type,
         content,
         timestamp: timestamp || new Date().toISOString()
       };
 
-      const connectedUserSocketId = userSockets.get(user.connectedUser.toString());
+      const connectedUserSocketId = userSockets.get(guestSession.connectedUser);
       
       if (connectedUserSocketId) {
         // Send message to connected user
@@ -300,54 +322,55 @@ function createSocketHandlers(io) {
           timestamp: new Date().toISOString()
         });
 
-        logger.info(`Message sent: ${user.username} -> ${user.connectedUser} (${type})`);
+        logger.info(`Guest message sent: ${guestSession.username} -> ${guestSession.connectedUser} (${type})`);
       } else {
         socket.emit('chat:error', { message: 'Connected user is not available' });
       }
 
     } catch (error) {
-      logger.error('Chat message error:', error);
+      logger.error('Guest chat message error:', error);
       socket.emit('chat:error', { message: 'Failed to send message' });
     }
   }
 
-  // Handle chat clear (when user leaves current chat)
+  // Handle chat clear (when guest leaves current chat)
   async function handleChatClear(socket) {
     try {
-      const userId = socket.userId;
-      const user = await User.findById(userId);
+      const sessionId = socket.sessionId;
+      const guestSession = await getGuestBySessionId(sessionId);
 
-      if (!user) {
-        socket.emit('chat:error', { message: 'User not found' });
+      if (!guestSession) {
+        socket.emit('chat:error', { message: 'Guest session not found' });
         return;
       }
 
-      if (user.connectedUser) {
-        const connectedUserSocketId = userSockets.get(user.connectedUser.toString());
-        const connectedUser = await User.findById(user.connectedUser);
+      if (guestSession.connectedUser) {
+        const connectedUserSocketId = userSockets.get(guestSession.connectedUser);
         
-        // Create room ID the same way as in handleUserMatch
-        const roomId = [userId, user.connectedUser.toString()].sort().join('_');
+        // Create room ID
+        const roomId = [guestSession.id, guestSession.connectedUser].sort().join('_');
         
         // Notify the room that user has left
         io.to(roomId).emit('room:user_left', {
-          userId: userId,
-          username: user.username,
-          message: `${user.username} has left the chat`
+          userId: guestSession.id,
+          username: guestSession.username,
+          message: `${guestSession.username} has left the chat`
         });
         
         if (connectedUserSocketId) {
           // Notify connected user that chat is being cleared
           io.to(connectedUserSocketId).emit('chat:cleared', {
-            userId: userId,
-            username: user.username,
+            userId: guestSession.id,
+            username: guestSession.username,
             reason: 'User left the chat'
           });
 
           // Disconnect the other user too
-          if (connectedUser) {
-            await connectedUser.disconnect();
-          }
+          const connectedGuestSessionId = guestSession.connectedUser.replace('guest_', '');
+          await updateGuestPresence(connectedGuestSessionId, {
+            connectedUser: null,
+            inChat: false
+          });
         }
 
         // Leave the room
@@ -359,8 +382,11 @@ function createSocketHandlers(io) {
           logger.info(`Cleaned up ${deletedFilesCount} temporary files for room ${roomId}`);
         }
         
-        // Disconnect current user
-        await user.disconnect();
+        // Disconnect current guest
+        await updateGuestPresence(sessionId, {
+          connectedUser: null,
+          inChat: false
+        });
       }
 
       // Confirm chat clear to user
@@ -368,7 +394,7 @@ function createSocketHandlers(io) {
         message: 'Chat cleared successfully'
       });
 
-      logger.info(`Chat cleared for user: ${user.username}`);
+      logger.info(`Chat cleared for guest: ${guestSession.username}`);
 
     } catch (error) {
       logger.error('Chat clear error:', error);
@@ -376,29 +402,29 @@ function createSocketHandlers(io) {
     }
   }
 
-  // WebRTC Signaling Handlers
+  // WebRTC Signaling Handlers for guests
   async function handleWebRTCOffer(socket, data) {
     try {
-      const userId = socket.userId;
-      const user = await User.findById(userId);
+      const sessionId = socket.sessionId;
+      const guestSession = await getGuestBySessionId(sessionId);
 
-      if (!user || !user.connectedUser) {
+      if (!guestSession || !guestSession.connectedUser) {
         socket.emit('webrtc:error', { message: 'You are not connected to any user' });
         return;
       }
 
       const { offer, type } = data; // type: 'audio' or 'video'
-      const connectedUserSocketId = userSockets.get(user.connectedUser.toString());
+      const connectedUserSocketId = userSockets.get(guestSession.connectedUser);
 
       if (connectedUserSocketId) {
         io.to(connectedUserSocketId).emit('webrtc:offer', {
           offer,
           type,
-          from: userId,
-          fromUsername: user.username
+          from: guestSession.id,
+          fromUsername: guestSession.username
         });
 
-        logger.info(`WebRTC offer sent: ${user.username} -> ${user.connectedUser} (${type})`);
+        logger.info(`WebRTC offer sent: ${guestSession.username} -> ${guestSession.connectedUser} (${type})`);
       } else {
         socket.emit('webrtc:error', { message: 'Connected user is not available' });
       }
@@ -411,25 +437,25 @@ function createSocketHandlers(io) {
 
   async function handleWebRTCAnswer(socket, data) {
     try {
-      const userId = socket.userId;
-      const user = await User.findById(userId);
+      const sessionId = socket.sessionId;
+      const guestSession = await getGuestBySessionId(sessionId);
 
-      if (!user || !user.connectedUser) {
+      if (!guestSession || !guestSession.connectedUser) {
         socket.emit('webrtc:error', { message: 'You are not connected to any user' });
         return;
       }
 
       const { answer } = data;
-      const connectedUserSocketId = userSockets.get(user.connectedUser.toString());
+      const connectedUserSocketId = userSockets.get(guestSession.connectedUser);
 
       if (connectedUserSocketId) {
         io.to(connectedUserSocketId).emit('webrtc:answer', {
           answer,
-          from: userId,
-          fromUsername: user.username
+          from: guestSession.id,
+          fromUsername: guestSession.username
         });
 
-        logger.info(`WebRTC answer sent: ${user.username} -> ${user.connectedUser}`);
+        logger.info(`WebRTC answer sent: ${guestSession.username} -> ${guestSession.connectedUser}`);
       } else {
         socket.emit('webrtc:error', { message: 'Connected user is not available' });
       }
@@ -442,24 +468,24 @@ function createSocketHandlers(io) {
 
   async function handleICECandidate(socket, data) {
     try {
-      const userId = socket.userId;
-      const user = await User.findById(userId);
+      const sessionId = socket.sessionId;
+      const guestSession = await getGuestBySessionId(sessionId);
 
-      if (!user || !user.connectedUser) {
+      if (!guestSession || !guestSession.connectedUser) {
         socket.emit('webrtc:error', { message: 'You are not connected to any user' });
         return;
       }
 
       const { candidate } = data;
-      const connectedUserSocketId = userSockets.get(user.connectedUser.toString());
+      const connectedUserSocketId = userSockets.get(guestSession.connectedUser);
 
       if (connectedUserSocketId) {
         io.to(connectedUserSocketId).emit('webrtc:ice-candidate', {
           candidate,
-          from: userId
+          from: guestSession.id
         });
 
-        logger.debug(`ICE candidate sent: ${user.username} -> ${user.connectedUser}`);
+        logger.debug(`ICE candidate sent: ${guestSession.username} -> ${guestSession.connectedUser}`);
       } else {
         socket.emit('webrtc:error', { message: 'Connected user is not available' });
       }
@@ -470,24 +496,26 @@ function createSocketHandlers(io) {
     }
   }
 
-  // Handle cancellation of matching request
+  // Handle cancellation of matching request for guests
   async function handleCancelMatch(socket, data) {
     try {
-      const userId = socket.userId;
-      const user = await User.findById(userId);
+      const sessionId = socket.sessionId;
+      const guestSession = await getGuestBySessionId(sessionId);
 
-      if (!user) {
-        socket.emit('user:match:cancel:error', { message: 'User not found' });
+      if (!guestSession) {
+        socket.emit('user:match:cancel:error', { message: 'Guest session not found' });
         return;
       }
 
       // Stop searching for a match
-      await user.stopSearching();
+      await updateGuestPresence(sessionId, {
+        isSearching: false
+      });
       
       // Notify the user that they are no longer searching
       socket.emit('user:match:cancelled', { message: 'Matching cancelled' });
       
-      logger.info(`User ${user.username} cancelled matching`);
+      logger.info(`Guest ${guestSession.username} cancelled matching`);
 
     } catch (error) {
       logger.error('Match cancellation error:', error);
@@ -495,134 +523,36 @@ function createSocketHandlers(io) {
     }
   }
 
-  // Handle user leaving room (route change or explicit leave)
+  // Handle guest leaving room (route change or explicit leave) - same as chat clear
   async function handleLeaveRoom(socket) {
-    try {
-      const userId = socket.userId;
-      const user = await User.findById(userId);
-      
-      if (!user) {
-        socket.emit('room:leave:error', { message: 'User not found' });
-        return;
-      }
-      
-      if (user.connectedUser) {
-        const connectedUserId = user.connectedUser.toString();
-        const connectedUserSocketId = userSockets.get(connectedUserId);
-        const connectedUser = await User.findById(connectedUserId);
-        
-        // Create room ID the same way as in handleUserMatch
-        const roomId = [userId, connectedUserId].sort().join('_');
-        
-        // Notify the room and connected user that this user has left
-        if (connectedUserSocketId) {
-          io.to(connectedUserSocketId).emit('room:closed', {
-            userId: userId,
-            username: user.username,
-            message: `The other user has left. Room closed.`,
-            reason: 'user_left'
-          });
-          
-          // Disconnect the other user too
-          if (connectedUser) {
-            await connectedUser.disconnect();
-          }
-        }
-        
-        // Leave the room
-        socket.leave(roomId);
-        
-        // Disconnect current user
-        await user.disconnect();
-        
-        logger.info(`User ${user.username} left room ${roomId}`);
-      }
-      
-      // Confirm room leave to user
-      socket.emit('room:left', {
-        message: 'Successfully left the room'
-      });
-      
-    } catch (error) {
-      logger.error('Leave room error:', error);
-      socket.emit('room:leave:error', { message: 'Failed to leave room' });
-    }
+    return await handleChatClear(socket);
   }
   
-  // Handle explicit room closure
+  // Handle explicit room closure for guests - same as chat clear
   async function handleCloseRoom(socket) {
-    try {
-      const userId = socket.userId;
-      const user = await User.findById(userId);
-      
-      if (!user) {
-        socket.emit('room:close:error', { message: 'User not found' });
-        return;
-      }
-      
-      if (user.connectedUser) {
-        const connectedUserId = user.connectedUser.toString();
-        const connectedUserSocketId = userSockets.get(connectedUserId);
-        const connectedUser = await User.findById(connectedUserId);
-        
-        // Create room ID the same way as in handleUserMatch
-        const roomId = [userId, connectedUserId].sort().join('_');
-        
-        // Broadcast room closure to all participants
-        io.to(roomId).emit('room:closed', {
-          userId: userId,
-          username: user.username,
-          message: `${user.username} closed the room.`,
-          reason: 'room_closed'
-        });
-        
-        // Disconnect both users
-        await user.disconnect();
-        if (connectedUser) {
-          await connectedUser.disconnect();
-        }
-        
-        // Both users leave the room
-        socket.leave(roomId);
-        if (connectedUserSocketId) {
-          io.sockets.sockets.get(connectedUserSocketId)?.leave(roomId);
-        }
-        
-        // Clean up temporary files for this room
-        const deletedFilesCount = tempFileStorage.deleteRoomFiles(roomId);
-        if (deletedFilesCount > 0) {
-          logger.info(`Cleaned up ${deletedFilesCount} temporary files for room ${roomId}`);
-        }
-        
-        logger.info(`Room ${roomId} closed by user ${user.username}`);
-      }
-      
-    } catch (error) {
-      logger.error('Close room error:', error);
-      socket.emit('room:close:error', { message: 'Failed to close room' });
-    }
+    return await handleChatClear(socket);
   }
 
-  // WebRTC Call End Handler
+  // WebRTC Call End Handler for guests
   async function handleWebRTCCallEnd(socket, data) {
     try {
-      const userId = socket.userId;
-      const user = await User.findById(userId);
+      const sessionId = socket.sessionId;
+      const guestSession = await getGuestBySessionId(sessionId);
 
-      if (!user || !user.connectedUser) {
+      if (!guestSession || !guestSession.connectedUser) {
         socket.emit('webrtc:error', { message: 'You are not connected to any user' });
         return;
       }
 
-      const connectedUserSocketId = userSockets.get(user.connectedUser.toString());
+      const connectedUserSocketId = userSockets.get(guestSession.connectedUser);
 
       if (connectedUserSocketId) {
         io.to(connectedUserSocketId).emit('webrtc:call-end', {
-          from: userId,
-          fromUsername: user.username
+          from: guestSession.id,
+          fromUsername: guestSession.username
         });
 
-        logger.info(`WebRTC call ended: ${user.username} -> ${user.connectedUser}`);
+        logger.info(`WebRTC call ended: ${guestSession.username} -> ${guestSession.connectedUser}`);
       } else {
         socket.emit('webrtc:error', { message: 'Connected user is not available' });
       }
@@ -633,26 +563,26 @@ function createSocketHandlers(io) {
     }
   }
 
-  // WebRTC Call Reject Handler
+  // WebRTC Call Reject Handler for guests
   async function handleWebRTCCallReject(socket, data) {
     try {
-      const userId = socket.userId;
-      const user = await User.findById(userId);
+      const sessionId = socket.sessionId;
+      const guestSession = await getGuestBySessionId(sessionId);
 
-      if (!user || !user.connectedUser) {
+      if (!guestSession || !guestSession.connectedUser) {
         socket.emit('webrtc:error', { message: 'You are not connected to any user' });
         return;
       }
 
-      const connectedUserSocketId = userSockets.get(user.connectedUser.toString());
+      const connectedUserSocketId = userSockets.get(guestSession.connectedUser);
 
       if (connectedUserSocketId) {
         io.to(connectedUserSocketId).emit('webrtc:call-reject', {
-          from: userId,
-          fromUsername: user.username
+          from: guestSession.id,
+          fromUsername: guestSession.username
         });
 
-        logger.info(`WebRTC call rejected: ${user.username} -> ${user.connectedUser}`);
+        logger.info(`WebRTC call rejected: ${guestSession.username} -> ${guestSession.connectedUser}`);
       } else {
         socket.emit('webrtc:error', { message: 'Connected user is not available' });
       }
@@ -660,6 +590,117 @@ function createSocketHandlers(io) {
     } catch (error) {
       logger.error('WebRTC call reject error:', error);
       socket.emit('webrtc:error', { message: 'Failed to reject call' });
+    }
+  }
+
+  // WebRTC Call Timeout Handler for guests
+  async function handleWebRTCCallTimeout(socket, data) {
+    try {
+      const sessionId = socket.sessionId;
+      const guestSession = await getGuestBySessionId(sessionId);
+
+      if (!guestSession || !guestSession.connectedUser) {
+        socket.emit('webrtc:error', { message: 'You are not connected to any user' });
+        return;
+      }
+
+      const connectedUserSocketId = userSockets.get(guestSession.connectedUser);
+
+      if (connectedUserSocketId) {
+        io.to(connectedUserSocketId).emit('webrtc:call-timeout', {
+          from: guestSession.id,
+          fromUsername: guestSession.username
+        });
+
+        logger.info(`WebRTC call timed out: ${guestSession.username} -> ${guestSession.connectedUser}`);
+      } else {
+        socket.emit('webrtc:error', { message: 'Connected user is not available' });
+      }
+
+    } catch (error) {
+      logger.error('WebRTC call timeout error:', error);
+      socket.emit('webrtc:error', { message: 'Failed to handle call timeout' });
+    }
+  }
+  
+  // Broadcast real-time statistics to all connected clients
+  async function broadcastUserStats() {
+    try {
+      // Get guest statistics from Redis
+      const guestStats = await getGuestStats();
+      const activeCount = await redisGuestManager.getActiveUserCount();
+      
+      const stats = {
+        totalUsers: guestStats.totalUsers,
+        onlineUsers: guestStats.onlineUsers,
+        activeUsers: activeCount,
+        availableUsers: guestStats.availableUsers,
+        connectedUsers: guestStats.connectedUsers
+      };
+      
+      // Get all online guests
+      const onlineGuests = await getAllOnlineGuests();
+      const onlineUsers = onlineGuests.map(guest => ({
+        id: guest.id,
+        username: guest.username,
+        isOnline: guest.isOnline,
+        isSearching: guest.isSearching,
+        lastSeen: guest.lastSeen,
+        location: guest.location,
+        gender: guest.gender,
+        language: guest.language,
+        isGuest: true
+      }));
+      
+      // Broadcast to all connected sockets
+      io.emit('realtime:stats', {
+        stats,
+        onlineUsers,
+        timestamp: new Date().toISOString()
+      });
+      
+      logger.debug('Broadcasted real-time statistics:', stats);
+    } catch (error) {
+      logger.error('Error broadcasting user stats:', error);
+    }
+  }
+  
+  // Get current statistics on demand
+  async function handleGetStats(socket) {
+    try {
+      const guestStats = await getGuestStats();
+      const onlineGuests = await getAllOnlineGuests();
+      const activeCount = await redisGuestManager.getActiveUserCount();
+      
+      const stats = {
+        totalUsers: guestStats.totalUsers,
+        onlineUsers: guestStats.onlineUsers,
+        activeUsers: activeCount,
+        availableUsers: guestStats.availableUsers,
+        connectedUsers: guestStats.connectedUsers
+      };
+      
+      const onlineUsers = onlineGuests.map(guest => ({
+        id: guest.id,
+        username: guest.username,
+        isOnline: guest.isOnline,
+        isSearching: guest.isSearching,
+        lastSeen: guest.lastSeen,
+        location: guest.location,
+        gender: guest.gender,
+        language: guest.language,
+        isGuest: true
+      }));
+      
+      socket.emit('realtime:stats', {
+        stats,
+        onlineUsers,
+        timestamp: new Date().toISOString()
+      });
+      
+    } catch (error) {
+      logger.error('Error getting stats:', error);
+      socket.emit('realtime:stats:error', { message: 'Failed to get statistics' });
     }
   }
 
@@ -675,8 +716,11 @@ function createSocketHandlers(io) {
     handleICECandidate,
     handleWebRTCCallEnd,
     handleWebRTCCallReject,
+    handleWebRTCCallTimeout,
     handleLeaveRoom,
-    handleCloseRoom
+    handleCloseRoom,
+    handleGetStats,
+    broadcastUserStats
   };
 }
 

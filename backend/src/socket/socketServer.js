@@ -3,7 +3,7 @@ const { createAdapter } = require('@socket.io/redis-adapter');
 const redis = require('redis');
 const { authenticateSocket } = require('../middleware/auth');
 const { createSocketHandlers, userSockets } = require('./socketHandlers');
-const { logger } = require('../config/database');
+const { logger } = require('../config/logger');
 
 function createSocketServer(server) {
   const io = new Server(server, {
@@ -98,6 +98,7 @@ function createSocketServer(server) {
       socket.on('webrtc:ice-candidate', (data) => handlers.handleICECandidate(socket, data));
       socket.on('webrtc:call-end', (data) => handlers.handleWebRTCCallEnd(socket, data));
       socket.on('webrtc:call-reject', (data) => handlers.handleWebRTCCallReject(socket, data));
+      socket.on('webrtc:call-timeout', (data) => handlers.handleWebRTCCallTimeout(socket, data));
 
       // Handle typing indicators
       socket.on('chat:typing:start', () => handleTypingStart(socket));
@@ -106,6 +107,9 @@ function createSocketServer(server) {
       // Handle room lifecycle events
       socket.on('leave-room', () => handlers.handleLeaveRoom(socket));
       socket.on('close-room', () => handlers.handleCloseRoom(socket));
+      
+      // Handle statistics requests
+      socket.on('get:stats', () => handlers.handleGetStats(socket));
 
       // Handle disconnect
       socket.on('disconnect', (reason) => {
@@ -128,13 +132,15 @@ function createSocketServer(server) {
 
   async function handleTypingStart(socket) {
     try {
-      const user = socket.user;
-      if (!user.connectedUser) return;
-      const connectedUserSocketId = userSockets?.get(user.connectedUser.toString());
+      const { getGuestBySessionId } = require('../controllers/guestController');
+      const guestSession = await getGuestBySessionId(socket.sessionId);
+      if (!guestSession || !guestSession.connectedUser) return;
+      
+      const connectedUserSocketId = userSockets?.get(guestSession.connectedUser);
       if (connectedUserSocketId) {
         io.to(connectedUserSocketId).emit('chat:typing:start', {
-          userId: user._id,
-          username: user.username
+          userId: guestSession.id,
+          username: guestSession.username
         });
       }
     } catch (error) {
@@ -144,13 +150,15 @@ function createSocketServer(server) {
 
   async function handleTypingStop(socket) {
     try {
-      const user = socket.user;
-      if (!user.connectedUser) return;
-      const connectedUserSocketId = userSockets?.get(user.connectedUser.toString());
+      const { getGuestBySessionId } = require('../controllers/guestController');
+      const guestSession = await getGuestBySessionId(socket.sessionId);
+      if (!guestSession || !guestSession.connectedUser) return;
+      
+      const connectedUserSocketId = userSockets?.get(guestSession.connectedUser);
       if (connectedUserSocketId) {
         io.to(connectedUserSocketId).emit('chat:typing:stop', {
-          userId: user._id,
-          username: user.username
+          userId: guestSession.id,
+          username: guestSession.username
         });
       }
     } catch (error) {

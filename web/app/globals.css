@@ -179,5 +179,316 @@ html, body {
     position: fixed;
     width: 100%;
     height: 100%;
+    overflow: hidden;
+  }
+}
+
+/* Improved mobile chat experience */
+.chat-container {
+  height: 100vh;
+  height: calc(var(--vh, 1vh) * 100);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  /* Prevent scroll during typing */
+  scroll-behavior: auto;
+  /* Prevent momentum scrolling on iOS */
+  overscroll-behavior: none;
+  /* Maintain scroll position during input focus */
+  contain: strict;
+}
+
+.chat-messages::-webkit-scrollbar {
+  display: none;
+}
+
+.chat-input-area {
+  flex-shrink: 0;
+  background: white;
+  border-top: 1px solid #e5e7eb;
+  /* Prevent keyboard from pushing input up */
+  position: relative;
+  z-index: 10;
+  /* Ensure input area stays at bottom */
+  bottom: 0;
+  left: 0;
+  right: 0;
+}
+
+/* Prevent input zoom on iOS and improve stability */
+@media (max-width: 768px) {
+  .chat-input input {
+    font-size: 16px !important;
+    transform: scale(1);
+    /* Prevent scroll when focused */
+    scroll-margin: 0;
+    scroll-padding: 0;
+  }
+  
+  /* Prevent viewport jumping on input focus */
+  .chat-input input:focus {
+    outline: none;
+    scroll-margin: 0;
+  }
+  
+  /* Stable input container */
+  .chat-input-container {
+    position: sticky;
+    bottom: 0;
+    background: white;
+    z-index: 100;
+  }
+}
+
+/* Stable keyboard handling */
+@media (max-width: 768px) {
+  .mobile-screen.keyboard-open {
+    height: 100vh;
+    height: calc(var(--vh, 1vh) * 100);
+  }
+}
+
+/* File preview improvements */
+.file-preview-container {
+  max-height: 200px;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+/* Better message spacing */
+.message-list {
+  padding: 1rem;
+  padding-bottom: 0;
+}
+
+.message-item {
+  margin-bottom: 0.5rem;
+}
+
+.message-item:last-child {
+  margin-bottom: 1rem;
+}
+
+/* Prevent scroll during typing on mobile */
+@media (max-width: 768px) {
+  .typing-mode .chat-messages {
+    overflow: hidden;
+    position: fixed;
+  }
+  
+  /* Smooth scroll only for new messages */
+  .chat-messages.smooth-scroll {
+    scroll-behavior: smooth;
+  }
+  
+  /* Lock scroll position during input events */
+  .chat-messages.scroll-locked {
+    overflow: hidden;
+    touch-action: none;
+  }
+}
+
+/* Better message rendering */
+.message-list {
+  will-change: scroll-position;
+  transform: translateZ(0);
+}
+
+/* Optimize scrolling performance */
+.chat-messages {
+  scrollbar-gutter: stable;
+  scroll-snap-type: none;
+}
+
+/* Enhanced mobile optimizations for WhatsApp/Telegram-like experience */
+@media (max-width: 768px) {
+  /* Prevent viewport jumping during keyboard events */
+  .mobile-screen.keyboard-visible {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+  
+  /* Smooth message area transitions */
+  .chat-messages {
+    transition: none;
+    will-change: scroll-position;
+    /* Prevent scroll during input focus/blur */
+    scroll-behavior: auto;
+  }
+  
+  /* Stable input area positioning */
+  .chat-input-container {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: white;
+    border-top: 1px solid #e5e7eb;
+    z-index: 1000;
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    /* Prevent layout shift */
+    contain: layout style;
+  }
+  
+  /* Input field optimizations */
+  .chat-input {
+    /* Prevent iOS zoom */
+    font-size: 16px !important;
+    /* Stable baseline */
+    vertical-align: baseline;
+    /* Prevent autocomplete dropdown issues */
+    position: relative;
+    z-index: 1;
+  }
+  
+  /* Prevent scroll interference during typing */
+  .typing-active .chat-messages {
+    /* Temporarily lock scroll position */
+    overflow: hidden;
+    /* Maintain scroll position */
+    scroll-behavior: auto;
+  }
+  
+  /* Message area padding adjustment for fixed input */
+  .chat-messages {
+    padding-bottom: 80px; /* Space for fixed input */
+  }
+  
+  /* File preview stability */
+  .file-preview-container img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    /* Prevent layout shift */
+    contain: layout style;
+  }
+  
+  /* Stable avatar rendering */
+  .message-item {
+    contain: layout style;
+  }
+  
+  /* Improved visual viewport handling */
+  @supports (height: 100dvh) {
+    .mobile-screen {
+      height: 100dvh;
+      height: 100vh; /* Fallback */
+      height: calc(var(--vh, 1vh) * 100); /* Dynamic */
+    }
+  }
+  
+  /* Better keyboard handling */
+  .chat-input input:focus {
+    /* Prevent viewport shift on focus */
+    position: relative;
+    z-index: 2;
+    /* Maintain stable dimensions */
+    width: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* Smooth transitions only when appropriate */
+  .chat-messages:not(.scroll-locked):not(.typing-mode) {
+    scroll-behavior: smooth;
+  }
+  
+  /* Optimize message rendering */
+  .message-item {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    /* Prevent layout thrashing */
+    will-change: transform;
+  }
+}
+
+/* iOS Safari specific fixes */
+@supports (-webkit-touch-callout: none) {
+  @media (max-width: 768px) {
+    /* Fix viewport height on iOS */
+    .mobile-screen {
+      height: calc(var(--vh, 1vh) * 100);
+      min-height: calc(var(--vh, 1vh) * 100);
+    }
+    
+    /* Prevent iOS rubber band scrolling */
+    .chat-messages {
+      overscroll-behavior-y: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    
+    /* Stable input on iOS keyboard */
+    .chat-input-container {
+      position: fixed;
+      bottom: env(safe-area-inset-bottom, 0);
+      /* iOS keyboard safe area */
+      padding-bottom: env(keyboard-inset-height, 0);
+    }
+    
+    /* Prevent iOS zoom on input focus */
+    .chat-input input {
+      font-size: 16px !important;
+      transform: scale(1);
+      /* Prevent iOS input zoom */
+      -webkit-text-size-adjust: 100%;
+    }
+  }
+}
+
+/* Android Chrome specific optimizations */
+@media screen and (max-width: 768px) and (-webkit-min-device-pixel-ratio: 0) {
+  /* Chrome mobile viewport handling */
+  .mobile-screen {
+    height: 100vh;
+    height: calc(var(--vh, 1vh) * 100);
+  }
+  
+  /* Better Android keyboard handling */
+  .chat-input-container {
+    /* Ensure visibility above keyboard */
+    position: sticky;
+    bottom: 0;
+    z-index: 999;
+  }
+}
+
+/* Enhance typing indicator stability */
+@media (max-width: 768px) {
+  .typing-indicator {
+    position: sticky;
+    bottom: 80px; /* Above input area */
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+}
+
+/* Performance optimizations */
+@media (max-width: 768px) {
+  /* GPU acceleration for smooth scrolling */
+  .chat-container,
+  .chat-messages,
+  .chat-input-container {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+  
+  /* Optimize animation performance */
+  .message-item {
+    will-change: transform;
+  }
+  
+  /* Reduce repaints during scroll */
+  .chat-messages {
+    contain: strict;
   }
 }

@@ -18,10 +18,11 @@ interface UseWebRTCProps {
   connectedUser?: { id: string; username: string } | null
   currentUserId?: string
   addSystemMessage?: (content: string) => void
+  callTimeoutDuration?: number // Optional timeout duration in milliseconds
 }
 
 const useWebRTC = (props?: UseWebRTCProps) => {
-  const { connectedUser, currentUserId, addSystemMessage } = props || {}
+  const { connectedUser, currentUserId, addSystemMessage, callTimeoutDuration } = props || {}
   const { createCallLogMessage, startCallTimer, getCallDuration, resetCallTimer } = useCallLogs()
   const [localStream, setLocalStream] = useState<MediaStream | null>(null)
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null)
@@ -38,6 +39,10 @@ const useWebRTC = (props?: UseWebRTCProps) => {
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   const iceCandidateQueue = useRef<RTCIceCandidate[]>([])
+  const callTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // Configuration
+  const CALL_TIMEOUT_DURATION = callTimeoutDuration || 30000 // Default 30 seconds, configurable
 
   const servers: RTCConfiguration = {
     iceServers: [
@@ -59,6 +64,7 @@ const useWebRTC = (props?: UseWebRTCProps) => {
       socketService.off("webrtc:ice-candidate", handleReceiveIceCandidate)
       socketService.off("webrtc:call-end", handleReceiveCallEnd)
       socketService.off("webrtc:call-reject", handleReceiveCallReject)
+      socketService.off("webrtc:call-timeout", handleReceiveCallTimeout)
       cleanup()
     }
   }, [])
@@ -69,6 +75,7 @@ const useWebRTC = (props?: UseWebRTCProps) => {
     socketService.on("webrtc:ice-candidate", handleReceiveIceCandidate)
     socketService.on("webrtc:call-end", handleReceiveCallEnd)
     socketService.on("webrtc:call-reject", handleReceiveCallReject)
+    socketService.on("webrtc:call-timeout", handleReceiveCallTimeout)
   }
 
   const createPeerConnection = (): RTCPeerConnection => {
@@ -230,6 +237,12 @@ const useWebRTC = (props?: UseWebRTCProps) => {
       setCallState("ringing")
       console.log('📞 Call offer sent, waiting for response...')
       
+      // Set call timeout for automatic disconnect
+      callTimeoutRef.current = setTimeout(() => {
+        console.log('⏰ Call timeout - no answer received')
+        handleCallTimeout()
+      }, CALL_TIMEOUT_DURATION)
+      
     } catch (error: any) {
       console.error("❌ Error starting call:", error)
       setIsRequestingPermissions(false)
@@ -339,6 +352,9 @@ const useWebRTC = (props?: UseWebRTCProps) => {
       socketService.sendAnswer(answer)
       console.log('📡 Call answer sent successfully')
       
+      // Clear any existing call timeout since call was accepted
+      clearCallTimeout()
+      
     } catch (error: any) {
       console.error("❌ Error accepting call:", error)
       setIsRequestingPermissions(false)
@@ -386,14 +402,22 @@ const useWebRTC = (props?: UseWebRTCProps) => {
   }
 
   const endCall = (isRemoteEnd: boolean = false): void => {
+    console.log(`📞 Ending call - isRemoteEnd: ${isRemoteEnd}, callState: ${callState}`)
+    
+    // Clear any pending timeouts
+    clearCallTimeout()
+    
     // Send call end signal only if we're ending the call (not receiving remote end)
     if (!isRemoteEnd && (callState === "connected" || callState === "connecting" || callState === "ringing")) {
+      console.log('📡 Sending call end signal to remote user')
       socketService.sendCallEnd()
     }
     
     // Log call end with duration if call was connected
     if ((callState === "connected" || callState === "connecting") && connectedUser && currentUserId && addSystemMessage && callType) {
       const duration = getCallDuration()
+      console.log(`🕓 Call duration: ${duration} seconds`)
+      
       if (duration > 0) { // Only log if call had actual duration
         const callLogEntry = {
           type: "call-end" as const,
@@ -407,6 +431,7 @@ const useWebRTC = (props?: UseWebRTCProps) => {
         }
         const logMessage = createCallLogMessage(callLogEntry, currentUserId)
         addSystemMessage(logMessage.content)
+        console.log('📝 Added call end system message')
       }
     }
     
@@ -430,6 +455,9 @@ const useWebRTC = (props?: UseWebRTCProps) => {
           setCallState("connecting")
           await peerConnection.current.setRemoteDescription(new RTCSessionDescription(data.answer))
           console.log('✅ Successfully set remote answer - WebRTC connection should be establishing...')
+          
+          // Clear call timeout since call was answered
+          clearCallTimeout()
           
           // Process any queued ICE candidates now that remote description is set
           await processQueuedIceCandidates()
@@ -479,13 +507,53 @@ const useWebRTC = (props?: UseWebRTCProps) => {
     // Clear the queue
     iceCandidateQueue.current = []
   }
+  
+  const clearCallTimeout = (): void => {
+    if (callTimeoutRef.current) {
+      clearTimeout(callTimeoutRef.current)
+      callTimeoutRef.current = null
+      console.log('✅ Call timeout cleared')
+    }
+  }
+  
+  const handleCallTimeout = (): void => {
+    console.log('⏰ Handling call timeout - marking as missed call')
+    
+    // Log missed call when timeout occurs (caller side)
+    if (callType && connectedUser && currentUserId && addSystemMessage) {
+      const callLogEntry = {
+        type: "call-missed" as const,
+        callType: callType,
+        timestamp: new Date().toISOString(),
+        participants: {
+          caller: currentUserId,
+          callee: connectedUser.id
+        }
+      }
+      const logMessage = createCallLogMessage(callLogEntry, currentUserId)
+      addSystemMessage(logMessage.content)
+    }
+    
+    // Send timeout signal to other user
+    socketService.sendCallTimeout()
+    
+    // End the call locally
+    setCallState("idle")
+    setIsCallActive(false)
+    cleanup()
+  }
 
   const handleReceiveCallEnd = (): void => {
     console.log('Received call end from remote user')
     
+    // Clear any pending timeouts
+    clearCallTimeout()
+    
     // Log call end with duration if call was connected
     if ((callState === "connected" || callState === "connecting") && connectedUser && currentUserId && addSystemMessage && callType) {
       const duration = getCallDuration()
+      console.log(`🕓 Remote call end - duration: ${duration} seconds`)
+      
       if (duration > 0) { // Only log if call had actual duration
         const callLogEntry = {
           type: "call-end" as const,
@@ -499,16 +567,21 @@ const useWebRTC = (props?: UseWebRTCProps) => {
         }
         const logMessage = createCallLogMessage(callLogEntry, currentUserId)
         addSystemMessage(logMessage.content)
+        console.log('📝 Added call end system message (from remote)')
       }
     }
     
     // End the call locally without sending signal (remote already ended)
     setIsCallActive(false)
+    setCallState("idle")
     cleanup()
   }
 
   const handleReceiveCallReject = (): void => {
     console.log('Call was rejected by remote user')
+    
+    // Clear any pending timeouts
+    clearCallTimeout()
     
     // Log missed call when call was rejected
     if (callType && connectedUser && currentUserId && addSystemMessage) {
@@ -526,6 +599,32 @@ const useWebRTC = (props?: UseWebRTCProps) => {
     }
     
     // Clean up call state
+    setIsCallActive(false)
+    setCallState("idle")
+    cleanup()
+  }
+  
+  const handleReceiveCallTimeout = (): void => {
+    console.log('Call timed out - received from remote user')
+    
+    // Log missed call when timeout is received (callee side)
+    if (incomingCallData && connectedUser && currentUserId && addSystemMessage) {
+      const callLogEntry = {
+        type: "call-missed" as const,
+        callType: incomingCallData.type,
+        timestamp: new Date().toISOString(),
+        participants: {
+          caller: incomingCallData.from,
+          callee: currentUserId
+        }
+      }
+      const logMessage = createCallLogMessage(callLogEntry, currentUserId)
+      addSystemMessage(logMessage.content)
+    }
+    
+    // Clean up call state
+    setIsIncomingCall(false)
+    setIncomingCallData(null)
     setIsCallActive(false)
     setCallState("idle")
     cleanup()
@@ -566,7 +665,8 @@ const useWebRTC = (props?: UseWebRTCProps) => {
       remoteVideoRef.current.srcObject = null
     }
 
-    // Clear ICE candidate queue
+    // Clear call timeout and ICE candidate queue
+    clearCallTimeout()
     iceCandidateQueue.current = []
     
     // Reset all state

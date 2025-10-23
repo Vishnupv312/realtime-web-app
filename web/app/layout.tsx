@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Analytics } from "@vercel/analytics/next";
-import { AuthProvider } from "@/contexts/AuthContext";
 import { ChatProvider } from "@/contexts/ChatContext";
+import { GuestSessionProvider } from "@/contexts/GuestSessionContext";
 import { Toaster } from "@/components/ui/toaster";
 import { Suspense } from "react";
 import "./globals.css";
@@ -24,12 +24,12 @@ export default function RootLayout({
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body className="font-sans antialiased">
         <Suspense fallback={null}>
-          <AuthProvider>
+          <GuestSessionProvider>
             <ChatProvider>
               {children}
               <Toaster />
             </ChatProvider>
-          </AuthProvider>
+          </GuestSessionProvider>
         </Suspense>
         <Analytics />
       </body>

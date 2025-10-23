@@ -30,7 +30,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useChat } from "@/contexts/ChatContext";
-import { useAuth } from "@/contexts/AuthContext";
+import { useGuestSession } from "@/contexts/GuestSessionContext";
 
 interface MatchingInterfaceProps {
   onMatchFound: () => void;
@@ -39,7 +39,7 @@ interface MatchingInterfaceProps {
 export default function MatchingInterface({
   onMatchFound,
 }: MatchingInterfaceProps) {
-  const { user } = useAuth();
+  const { guestUser } = useGuestSession();
   const { isMatching, connectedUser, requestMatch, cancelMatch } = useChat();
   const [matchingStage, setMatchingStage] = useState<
     "idle" | "searching" | "found" | "failed"
@@ -188,8 +188,8 @@ export default function MatchingInterface({
           </Card>
         </motion.div>
 
-        {/* User Stats */}
-        {user && (
+        {/* Guest User Profile */}
+        {guestUser && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -209,31 +209,21 @@ export default function MatchingInterface({
                 <div className="flex items-center gap-4">
                   <Avatar className="h-16 w-16">
                     <AvatarFallback className="bg-blue-600 text-white text-lg">
-                      {getInitials(user.username)}
+                      {getInitials(guestUser.username)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
-                      {user.username}
+                      {guestUser.username}
                     </h3>
                     <div className="flex items-center gap-2 mt-1">
-                      <Badge variant={user.isOnline ? "default" : "secondary"}>
-                        {user.isOnline ? "Online" : "Offline"}
-                      </Badge>
-                      {user.location && (
-                        <Badge
-                          variant="outline"
-                          className="flex items-center gap-1"
-                        >
-                          <MapPin className="w-3 h-3" />
-                          {user.location.city}, {user.location.country}
-                        </Badge>
-                      )}
+                      <Badge variant="default">Guest User</Badge>
+                      <Badge variant="outline">Online</Badge>
                     </div>
                     <div className="flex items-center gap-2 mt-2 text-sm text-gray-600 dark:text-gray-400">
                       <Clock className="w-3 h-3" />
                       <span>
-                        Joined {new Date(user.createdAt).toLocaleDateString()}
+                        Session started {new Date().toLocaleTimeString()}
                       </span>
                     </div>
                   </div>
@@ -245,174 +235,364 @@ export default function MatchingInterface({
       </div>
 
       {/* Matching Dialog */}
-      <Dialog open={showMatchDialog} onOpenChange={() => {}}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {matchingStage === "searching" && (
-                <>
-                  <motion.div
-                    animate={{ scale: [1, 1.2, 1] }}
-                    transition={{
-                      repeat: Infinity,
-                      duration: 1.2,
-                      ease: "easeInOut",
-                    }}
-                    className="flex items-center justify-center"
-                  >
-                    <div className="animate-spin rounded-full h-6 w-6 border-2 border-blue-500 border-t-transparent mr-2" />
-                  </motion.div>
-                  <span className="font-medium text-blue-600">
-                    Looking for your perfect match...
-                  </span>
-                </>
-              )}
+      <AnimatePresence>
+        {showMatchDialog && (
+          <Dialog
+            open={showMatchDialog}
+            onOpenChange={(open) => {
+              if (!open && matchingStage === "searching") {
+                // User clicked close button while searching - cancel the match
+                handleCancelMatching();
+              } else if (!open) {
+                // Allow closing for other stages
+                setShowMatchDialog(false);
+                if (matchingStage !== "found") {
+                  setMatchingStage("idle");
+                }
+              }
+            }}
+          >
+            <DialogContent className="sm:max-w-md overflow-hidden">
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+              >
+                <DialogHeader>
+                  <DialogTitle className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {matchingStage === "searching" && (
+                        <>
+                          <motion.div
+                            animate={{ rotate: 360 }}
+                            transition={{
+                              repeat: Infinity,
+                              duration: 1.2,
+                              ease: "linear",
+                            }}
+                            className="flex items-center justify-center"
+                          >
+                            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full" />
+                          </motion.div>
+                          <motion.span
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ delay: 0.2 }}
+                            className="font-medium text-blue-600"
+                          >
+                            Looking for your perfect match...
+                          </motion.span>
+                        </>
+                      )}
 
-              {matchingStage === "found" && (
-                <>
-                  <MessageCircle className="w-5 h-5 text-green-600" />
-                  Match Found!
-                </>
-              )}
-              {matchingStage === "failed" && (
-                <>
-                  <X className="w-5 h-5 text-red-600" />
-                  No Match Found
-                </>
-              )}
-            </DialogTitle>
-            <DialogDescription>
-              {matchingStage === "searching" &&
-                "We're searching for the perfect chat partner for you. This might take a moment..."}
-              {matchingStage === "found" &&
-                "Great! We found someone for you to chat with. Starting conversation..."}
-              {matchingStage === "failed" &&
-                "Sorry, no users are available right now. Please try again in a few moments."}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex flex-col items-center py-6">
-            <AnimatePresence mode="wait">
-              {matchingStage === "searching" && (
-                <motion.div
-                  key="searching"
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  className="text-center"
-                >
-                  <div className="relative mb-6">
-                    {/* User Icon */}
-                    <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center relative z-10">
-                      <Users className="w-7 h-7 text-blue-600 dark:text-blue-400" />
+                      {matchingStage === "found" && (
+                        <>
+                          <MessageCircle className="w-5 h-5 text-green-600" />
+                          Match Found!
+                        </>
+                      )}
+                      {matchingStage === "failed" && (
+                        <>
+                          <X className="w-5 h-5 text-red-600" />
+                          No Match Found
+                        </>
+                      )}
                     </div>
+                  </DialogTitle>
+                  <DialogDescription>
+                    {matchingStage === "searching" &&
+                      "We're searching for the perfect chat partner for you. This might take a moment..."}
+                    {matchingStage === "found" &&
+                      "Great! We found someone for you to chat with. Starting conversation..."}
+                    {matchingStage === "failed" &&
+                      "Sorry, no users are available right now. Please try again in a few moments."}
+                  </DialogDescription>
+                </DialogHeader>
 
-                    {/* Outer pulsing ring */}
-                    <motion.div
-                      initial={{ scale: 1, opacity: 0.6 }}
-                      animate={{ scale: [1, 1.4, 1], opacity: [0.6, 0, 0.6] }}
-                      transition={{
-                        duration: 2,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                      }}
-                      className="absolute inset-0 rounded-full border-2 border-blue-400"
-                    />
+                <div className="flex flex-col items-center py-6">
+                  <AnimatePresence mode="wait">
+                    {matchingStage === "searching" && (
+                      <motion.div
+                        key="searching"
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        className="text-center"
+                      >
+                        <div className="relative mb-6">
+                          {/* User Icon */}
+                          <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center relative z-10">
+                            <Users className="w-7 h-7 text-blue-600 dark:text-blue-400" />
+                          </div>
 
-                    {/* Second ripple for depth */}
-                    <motion.div
-                      initial={{ scale: 1, opacity: 0.4 }}
-                      animate={{ scale: [1, 1.8, 1], opacity: [0.4, 0, 0.4] }}
-                      transition={{
-                        duration: 3,
-                        repeat: Infinity,
-                        ease: "easeInOut",
-                        delay: 0.5,
-                      }}
-                      className="absolute inset-0 rounded-full border border-blue-300"
-                    />
-                  </div>
+                          {/* Outer pulsing ring */}
+                          <motion.div
+                            initial={{ scale: 1, opacity: 0.6 }}
+                            animate={{
+                              scale: [1, 1.4, 1],
+                              opacity: [0.6, 0, 0.6],
+                            }}
+                            transition={{
+                              duration: 2,
+                              repeat: Infinity,
+                              ease: "easeInOut",
+                            }}
+                            className="absolute inset-0 rounded-full border-2 border-blue-400"
+                          />
 
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                    Searching for available users...
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Duration: {formatDuration(searchDuration)}
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCancelMatching}
-                    className="mt-4 bg-transparent"
-                  >
-                    Cancel Search
-                  </Button>
-                </motion.div>
-              )}
+                          {/* Second ripple for depth */}
+                          <motion.div
+                            initial={{ scale: 1, opacity: 0.4 }}
+                            animate={{
+                              scale: [1, 1.8, 1],
+                              opacity: [0.4, 0, 0.4],
+                            }}
+                            transition={{
+                              duration: 3,
+                              repeat: Infinity,
+                              ease: "easeInOut",
+                              delay: 0.5,
+                            }}
+                            className="absolute inset-0 rounded-full border border-blue-300"
+                          />
+                        </div>
 
-              {matchingStage === "found" && connectedUser && (
-                <motion.div
-                  key="found"
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  className="text-center"
-                >
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
-                    className="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mb-4"
-                  >
-                    <MessageCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
-                  </motion.div>
-                  <Avatar className="h-12 w-12 mx-auto mb-3">
-                    <AvatarFallback className="bg-blue-600 text-white">
-                      {getInitials(connectedUser.username)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-1">
-                    {connectedUser.username}
-                  </h3>
-                  {connectedUser.location && (
-                    <p className="text-sm text-gray-600 dark:text-gray-400 flex items-center justify-center gap-1">
-                      <MapPin className="w-3 h-3" />
-                      {connectedUser.location.city},{" "}
-                      {connectedUser.location.country}
-                    </p>
-                  )}
-                  <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: "100%" }}
-                    transition={{ duration: 2 }}
-                    className="h-1 bg-green-500 rounded-full mt-4"
-                  />
-                </motion.div>
-              )}
+                        <motion.p
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.4 }}
+                          className="text-sm text-gray-600 dark:text-gray-400 mb-2"
+                        >
+                          Searching for available users...
+                        </motion.p>
+                        <motion.p
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ delay: 0.6 }}
+                          className="text-xs text-gray-500 mb-4"
+                        >
+                          Duration: {formatDuration(searchDuration)}
+                        </motion.p>
+                        <motion.div
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{ opacity: 1, scale: 1 }}
+                          transition={{ delay: 0.8 }}
+                        >
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleCancelMatching}
+                            className="bg-transparent hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors"
+                          >
+                            <X className="w-4 h-4 mr-2" />
+                            Cancel Search
+                          </Button>
+                        </motion.div>
+                      </motion.div>
+                    )}
 
-              {matchingStage === "failed" && (
-                <motion.div
-                  key="failed"
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.8 }}
-                  className="text-center"
-                >
-                  <div className="w-16 h-16 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center mb-4">
-                    <X className="w-8 h-8 text-red-600 dark:text-red-400" />
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                    No users are available for matching right now.
-                  </p>
-                  <Button onClick={handleStartMatching} size="sm">
-                    Try Again
-                  </Button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </DialogContent>
-      </Dialog>
+                    {matchingStage === "found" && connectedUser && (
+                      <motion.div
+                        key="found"
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        className="text-center"
+                      >
+                        {/* Success Animation */}
+                        <motion.div
+                          initial={{ scale: 0, rotate: -180 }}
+                          animate={{ scale: 1, rotate: 0 }}
+                          transition={{
+                            delay: 0.2,
+                            type: "spring",
+                            stiffness: 200,
+                          }}
+                          className="relative mb-6"
+                        >
+                          <div className="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center relative z-10">
+                            <MessageCircle className="w-8 h-8 text-green-600 dark:text-green-400" />
+                          </div>
+                          {/* Success ripple effect */}
+                          <motion.div
+                            initial={{ scale: 0, opacity: 0.8 }}
+                            animate={{
+                              scale: [1, 2, 3],
+                              opacity: [0.8, 0.4, 0],
+                            }}
+                            transition={{ duration: 1.5, ease: "easeOut" }}
+                            className="absolute inset-0 bg-green-400 rounded-full"
+                          />
+                        </motion.div>
+
+                        {/* User Avatar with entrance animation */}
+                        <motion.div
+                          initial={{ scale: 0, y: 20 }}
+                          animate={{ scale: 1, y: 0 }}
+                          transition={{
+                            delay: 0.5,
+                            type: "spring",
+                            stiffness: 150,
+                          }}
+                        >
+                          <Avatar className="h-16 w-16 mx-auto mb-3 ring-2 ring-green-200 dark:ring-green-800">
+                            <AvatarFallback className="bg-blue-600 text-white text-lg">
+                              {getInitials(connectedUser.username)}
+                            </AvatarFallback>
+                          </Avatar>
+                        </motion.div>
+
+                        {/* User details with staggered animation */}
+                        <motion.h3
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.7 }}
+                          className="font-semibold text-lg text-gray-900 dark:text-white mb-1"
+                        >
+                          {connectedUser.username}
+                        </motion.h3>
+
+                        {connectedUser.location && (
+                          <motion.p
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: 0.9 }}
+                            className="text-sm text-gray-600 dark:text-gray-400 flex items-center justify-center gap-1 mb-4"
+                          >
+                            <MapPin className="w-3 h-3" />
+                            {connectedUser.location.city},{" "}
+                            {connectedUser.location.country}
+                          </motion.p>
+                        )}
+
+                        {/* Loading progress bar */}
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ delay: 1.1 }}
+                          className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden"
+                        >
+                          <motion.div
+                            initial={{ width: "0%" }}
+                            animate={{ width: "100%" }}
+                            transition={{ duration: 1.8, ease: "easeInOut" }}
+                            className="h-full bg-gradient-to-r from-green-400 to-blue-500 rounded-full"
+                          />
+                        </motion.div>
+
+                        {/* Connection message */}
+                        <motion.p
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={{ delay: 1.3 }}
+                          className="text-xs text-gray-500 mt-2"
+                        >
+                          Connecting you to the chat...
+                        </motion.p>
+                      </motion.div>
+                    )}
+
+                    {matchingStage === "failed" && (
+                      <motion.div
+                        key="failed"
+                        initial={{ opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        className="text-center"
+                      >
+                        {/* Failed animation */}
+                        <motion.div
+                          initial={{ scale: 0 }}
+                          animate={{ scale: [0, 1.2, 1] }}
+                          transition={{
+                            delay: 0.2,
+                            duration: 0.6,
+                            ease: "easeOut",
+                          }}
+                          className="relative mb-6"
+                        >
+                          <div className="w-16 h-16 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center relative z-10">
+                            <motion.div
+                              initial={{ scale: 0, rotate: 0 }}
+                              animate={{ scale: 1, rotate: [0, -10, 10, 0] }}
+                              transition={{ delay: 0.5, duration: 0.5 }}
+                            >
+                              <X className="w-8 h-8 text-red-600 dark:text-red-400" />
+                            </motion.div>
+                          </div>
+                          {/* Error ripple effect */}
+                          <motion.div
+                            initial={{ scale: 0, opacity: 0.6 }}
+                            animate={{ scale: [1, 2.5], opacity: [0.6, 0] }}
+                            transition={{
+                              delay: 0.3,
+                              duration: 1.2,
+                              ease: "easeOut",
+                            }}
+                            className="absolute inset-0 bg-red-400 rounded-full"
+                          />
+                        </motion.div>
+
+                        <motion.div
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.8 }}
+                          className="space-y-4"
+                        >
+                          <h3 className="font-semibold text-gray-900 dark:text-white mb-2">
+                            No Match Found
+                          </h3>
+                          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                            No users are available for matching right now. Don't
+                            worry, try again in a moment!
+                          </p>
+
+                          <div className="flex flex-col gap-2">
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.9 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ delay: 1.0 }}
+                            >
+                              <Button
+                                onClick={handleStartMatching}
+                                size="sm"
+                                className="w-full"
+                              >
+                                <Shuffle className="w-4 h-4 mr-2" />
+                                Try Again
+                              </Button>
+                            </motion.div>
+
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.9 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ delay: 1.2 }}
+                            >
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setShowMatchDialog(false);
+                                  setMatchingStage("idle");
+                                }}
+                                className="w-full bg-transparent"
+                              >
+                                <X className="w-4 h-4 mr-2" />
+                                Close
+                              </Button>
+                            </motion.div>
+                          </div>
+                        </motion.div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              </motion.div>
+            </DialogContent>
+          </Dialog>
+        )}
+      </AnimatePresence>
     </>
   );
 }

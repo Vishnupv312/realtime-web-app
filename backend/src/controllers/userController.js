@@ -1,20 +1,16 @@
-const User = require('../models/User');
-const { logger } = require('../config/database');
+const { logger } = require('../config/logger');
 const { validationResult } = require('express-validator');
+const { getAllOnlineGuests, updateGuestPresence, getGuestBySessionId } = require('./guestController');
 const geoip = require('geoip-lite');
 
-// Get online users
+// Get online users (from guest sessions)
 const getOnlineUsers = async (req, res) => {
   try {
     const currentUserId = req.userId;
     
-    // Find all online users except current user
-    const onlineUsers = await User.find({
-      _id: { $ne: currentUserId },
-      isOnline: true
-    })
-    .select('username email isOnline lastSeen deviceId location connectedUser')
-    .populate('connectedUser', 'username email');
+    // Get all online guest users except current user
+    const allOnlineGuests = getAllOnlineGuests();
+    const onlineUsers = allOnlineGuests.filter(guest => guest.id !== currentUserId);
 
     res.json({
       success: true,
@@ -33,7 +29,7 @@ const getOnlineUsers = async (req, res) => {
   }
 };
 
-// Update device information
+// Update device information (for guest sessions)
 const updateDevice = async (req, res) => {
   try {
     // Check for validation errors
@@ -46,7 +42,7 @@ const updateDevice = async (req, res) => {
       });
     }
 
-    const userId = req.userId;
+    const sessionId = req.sessionId;
     const { deviceId } = req.body;
     
     // Get IP from request
@@ -74,42 +70,38 @@ const updateDevice = async (req, res) => {
       }
     }
 
-    // Update user with device info
+    // Update guest session with device info
     const updateData = {
-      lastSeen: new Date()
+      lastSeen: new Date(),
+      ip: clientIp
     };
 
     if (deviceId) updateData.deviceId = deviceId;
-    if (clientIp) updateData.ip = clientIp;
     if (location) updateData.location = location;
 
-    const user = await User.findByIdAndUpdate(
-      userId,
-      updateData,
-      { new: true, runValidators: true }
-    ).select('-password');
+    const guestSession = updateGuestPresence(sessionId, updateData);
 
-    if (!user) {
+    if (!guestSession) {
       return res.status(404).json({
         success: false,
-        message: 'User not found'
+        message: 'Guest session not found'
       });
     }
 
-    logger.info(`Device info updated for user: ${user.username}, IP: ${clientIp}, DeviceId: ${deviceId}`);
+    logger.info(`Device info updated for guest: ${guestSession.username}, IP: ${clientIp}, DeviceId: ${deviceId}`);
 
     res.json({
       success: true,
       message: 'Device information updated successfully',
       data: {
         user: {
-          id: user._id,
-          username: user.username,
-          email: user.email,
-          deviceId: user.deviceId,
-          ip: user.ip,
-          location: user.location,
-          lastSeen: user.lastSeen
+          id: guestSession.id,
+          username: guestSession.username,
+          deviceId: guestSession.deviceId,
+          ip: guestSession.ip,
+          location: guestSession.location,
+          lastSeen: guestSession.lastSeen,
+          isGuest: true
         }
       }
     });
@@ -123,13 +115,18 @@ const updateDevice = async (req, res) => {
   }
 };
 
-// Get available users for matching
+// Get available users for matching (from guest sessions)
 const getAvailableUsers = async (req, res) => {
   try {
     const currentUserId = req.userId;
     
-    // Find users who are online and not connected to anyone
-    const availableUsers = await User.findAvailableUsers(currentUserId);
+    // Get all online guest users except current user who are available for matching
+    const allOnlineGuests = getAllOnlineGuests();
+    const availableUsers = allOnlineGuests.filter(guest => 
+      guest.id !== currentUserId && 
+      !guest.connectedUser && 
+      guest.isSearching !== false
+    );
 
     res.json({
       success: true,
@@ -148,25 +145,16 @@ const getAvailableUsers = async (req, res) => {
   }
 };
 
-// Get user statistics
+// Get user statistics (from guest sessions)
 const getUserStats = async (req, res) => {
   try {
-    const totalUsers = await User.countDocuments();
-    const onlineUsers = await User.countDocuments({ isOnline: true });
-    const availableUsers = await User.countDocuments({ 
-      isOnline: true, 
-      connectedUser: null 
-    });
+    const { getGuestStats } = require('./guestController');
+    const stats = getGuestStats();
 
     res.json({
       success: true,
       data: {
-        statistics: {
-          totalUsers,
-          onlineUsers,
-          availableUsers,
-          connectedUsers: onlineUsers - availableUsers
-        }
+        statistics: stats
       }
     });
   } catch (error) {

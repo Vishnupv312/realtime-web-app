@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const { logger } = require('../config/database');
+const { logger } = require('../config/logger');
 
 const generateToken = (payload) => {
   try {

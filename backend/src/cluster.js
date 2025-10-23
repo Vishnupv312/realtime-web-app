@@ -1,6 +1,6 @@
 const cluster = require('cluster');
 const os = require('os');
-const { logger } = require('./config/database');
+const { logger } = require('./config/logger');
 
 if (cluster.isMaster) {
   const numWorkers = process.env.CLUSTER_WORKERS || os.cpus().length;
