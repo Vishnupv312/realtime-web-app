@@ -56,9 +56,11 @@ This is a **stateless real-time chat backend** designed for horizontal scaling w
 ### Core Technologies
 - **Node.js + Express** for HTTP API
 - **Socket.IO** for WebSocket real-time communication
-- **MongoDB + Mongoose** for user data and authentication
-- **Redis** (optional) for scaling Socket.IO across multiple instances
-- **JWT** for stateless authentication
+- **Redis** (optional) for guest session storage and scaling Socket.IO across multiple instances
+- **In-memory storage** for guest sessions (fallback when Redis unavailable)
+- **JWT** for stateless guest authentication
+
+**Note:** MongoDB code exists in `src/config/database.js` but is NOT currently used. The application uses Redis + in-memory storage only.
 
 ### Stateless Design Philosophy
 - **No message persistence** - messages exist only during active chat sessions
@@ -166,9 +168,10 @@ MAX_VOICE_DURATION=300           # 5 minutes default
 ```
 
 ### Infrastructure Dependencies
-- **MongoDB 4.4+** (required)
-- **Redis** (optional, for scaling)
 - **Node.js 16+** (required)
+- **Redis** (optional, recommended for production scaling and persistent sessions)
+
+**Note:** MongoDB is NOT required despite existing code in `src/config/database.js`
 
 ## Testing Endpoints
 
