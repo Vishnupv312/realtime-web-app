@@ -48,6 +48,7 @@ export default function VideoCallModal({
   const [isVideoOff, setIsVideoOff] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [callDuration, setCallDuration] = useState(0)
+  const [isRemoteVideoEnabled, setIsRemoteVideoEnabled] = useState(true)
 
   // Call duration timer
   useEffect(() => {
@@ -75,14 +76,48 @@ export default function VideoCallModal({
       
       remoteVideoRef.current.srcObject = remoteStream
       
+      // Monitor remote video track state
+      const videoTrack = remoteStream.getVideoTracks()[0]
+      if (videoTrack) {
+        // Set initial state
+        setIsRemoteVideoEnabled(videoTrack.enabled)
+        
+        // Listen for track enabled/disabled events
+        const handleTrackMute = () => {
+          console.log('📺 Remote video track muted/disabled')
+          setIsRemoteVideoEnabled(false)
+        }
+        const handleTrackUnmute = () => {
+          console.log('📺 Remote video track unmuted/enabled')
+          setIsRemoteVideoEnabled(true)
+        }
+        
+        videoTrack.addEventListener('mute', handleTrackMute)
+        videoTrack.addEventListener('unmute', handleTrackUnmute)
+        
+        // Also poll for enabled state changes (some browsers don't fire events)
+        const pollInterval = setInterval(() => {
+          if (videoTrack.enabled !== isRemoteVideoEnabled) {
+            setIsRemoteVideoEnabled(videoTrack.enabled)
+          }
+        }, 500)
+        
+        return () => {
+          videoTrack.removeEventListener('mute', handleTrackMute)
+          videoTrack.removeEventListener('unmute', handleTrackUnmute)
+          clearInterval(pollInterval)
+        }
+      }
+      
       // Ensure video plays (important for mobile)
       remoteVideoRef.current.play().catch(error => {
         console.log('📺 Remote video play error (might be expected on mobile):', error)
       })
     } else if (!remoteStream) {
       console.log('📺 VideoCallModal: No remote stream available yet')
+      setIsRemoteVideoEnabled(true) // Reset to default
     }
-  }, [remoteStream, remoteVideoRef])
+  }, [remoteStream, remoteVideoRef, isRemoteVideoEnabled])
 
   const handleEndCall = () => {
     endCall()
@@ -103,8 +138,10 @@ export default function VideoCallModal({
     if (localStream) {
       const videoTrack = localStream.getVideoTracks()[0]
       if (videoTrack) {
+        // Just toggle enabled state - keeps camera active but stops sending frames
         videoTrack.enabled = !videoTrack.enabled
         setIsVideoOff(!videoTrack.enabled)
+        console.log(`📹 Video ${videoTrack.enabled ? 'enabled' : 'disabled'}`)
       }
     }
   }
@@ -165,7 +202,7 @@ export default function VideoCallModal({
           
           {/* Remote Video - Full Screen Background */}
           <div className="absolute inset-0">
-            {remoteStream && callType === "video" ? (
+            {remoteStream && callType === "video" && isRemoteVideoEnabled ? (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -182,6 +219,22 @@ export default function VideoCallModal({
                   onError={(e) => console.error('❌ Remote video error:', e)}
                 />
               </motion.div>
+            ) : callType === "video" && remoteStream && !isRemoteVideoEnabled ? (
+              /* Show placeholder when remote user turned off video */
+              <div className="w-full h-full bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900">
+                <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
+                  <Avatar className="h-24 w-24 sm:h-32 sm:w-32 mb-6 ring-4 ring-white/20">
+                    <AvatarFallback className="bg-gradient-to-br from-blue-600 to-purple-600 text-white text-2xl sm:text-4xl">
+                      {connectedUser ? getInitials(connectedUser.username) : "?"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <h2 className="text-white text-xl sm:text-3xl font-light mb-2">{connectedUser?.username}</h2>
+                  <div className="flex items-center gap-2 text-gray-400 mt-4">
+                    <VideoOff className="w-5 h-5" />
+                    <p className="text-sm sm:text-base">Camera is off</p>
+                  </div>
+                </div>
+              </div>
             ) : (
               /* Gradient background when no remote video */
               <div className="w-full h-full bg-gradient-to-br from-gray-900 via-blue-900 to-purple-900">
