@@ -22,6 +22,12 @@ interface UseWebRTCProps {
 }
 
 const useWebRTC = (props?: UseWebRTCProps) => {
+  console.log("🎯 useWebRTC hook initialized", { 
+    hasProps: !!props, 
+    connectedUser: props?.connectedUser?.username,
+    currentUserId: props?.currentUserId 
+  });
+  
   const {
     connectedUser,
     currentUserId,
@@ -72,24 +78,26 @@ const useWebRTC = (props?: UseWebRTCProps) => {
     return () => {
       console.log("🧹 Cleaning up WebRTC socket listeners...");
       // Remove socket listeners to prevent memory leaks and duplicate handlers
-      socketService.off("webrtc:offer", handleReceiveOffer);
-      socketService.off("webrtc:answer", handleReceiveAnswer);
-      socketService.off("webrtc:ice-candidate", handleReceiveIceCandidate);
-      socketService.off("webrtc:call-end", handleReceiveCallEnd);
-      socketService.off("webrtc:call-reject", handleReceiveCallReject);
-      socketService.off("webrtc:call-timeout", handleReceiveCallTimeout);
+      socketService.off("webrtc:offer");
+      socketService.off("webrtc:answer");
+      socketService.off("webrtc:ice-candidate");
+      socketService.off("webrtc:call-end");
+      socketService.off("webrtc:call-reject");
+      socketService.off("webrtc:call-timeout");
       cleanup();
     };
   }, []);
 
   const setupSocketListeners = (): void => {
     // Remove any existing listeners first to prevent duplicates
-    socketService.off("webrtc:offer", handleReceiveOffer);
-    socketService.off("webrtc:answer", handleReceiveAnswer);
-    socketService.off("webrtc:ice-candidate", handleReceiveIceCandidate);
-    socketService.off("webrtc:call-end", handleReceiveCallEnd);
-    socketService.off("webrtc:call-reject", handleReceiveCallReject);
-    socketService.off("webrtc:call-timeout", handleReceiveCallTimeout);
+    socketService.off("webrtc:offer");
+    socketService.off("webrtc:answer");
+    socketService.off("webrtc:ice-candidate");
+    socketService.off("webrtc:call-end");
+    socketService.off("webrtc:call-reject");
+    socketService.off("webrtc:call-timeout");
+    
+    console.log("🔌 Registering WebRTC socket event handlers...");
     
     // Add fresh listeners
     socketService.on("webrtc:offer", handleReceiveOffer);
@@ -98,7 +106,7 @@ const useWebRTC = (props?: UseWebRTCProps) => {
     socketService.on("webrtc:call-end", handleReceiveCallEnd);
     socketService.on("webrtc:call-reject", handleReceiveCallReject);
     socketService.on("webrtc:call-timeout", handleReceiveCallTimeout);
-    console.log("✅ WebRTC socket listeners registered");
+    console.log("✅ WebRTC socket listeners registered successfully");
   };
 
   const createPeerConnection = (): RTCPeerConnection => {
@@ -648,10 +656,15 @@ const useWebRTC = (props?: UseWebRTCProps) => {
   };
 
   const handleReceiveOffer = async (data: IncomingCallData): Promise<void> => {
-    console.log("📞 Received WebRTC offer:", data);
+    console.log("📞 ===========================================");
+    console.log("📞 RECEIVED WEBRTC OFFER!");
+    console.log("📞 ===========================================");
+    console.log("📞 Offer data:", data);
     console.log(`   From: ${data.fromUsername} (${data.from})`);
     console.log(`   Type: ${data.type}`);
     console.log(`   Current call state: ${callState}`);
+    console.log(`   isCallActive: ${isCallActive}`);
+    console.log("📞 ===========================================");
     
     // If we're already in a call, ignore the new offer
     if (isCallActive || callState !== "idle") {
