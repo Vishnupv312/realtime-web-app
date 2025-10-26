@@ -17,6 +17,7 @@ class SocketService {
   public isConnected = false
   private connectionCallbacks: ((connected: boolean) => void)[] = []
   private currentUser: any = null
+  private webrtcListenersSetup: (() => void) | null = null
 
   connect(guestUser?: GuestUser): Socket {
     // Try to get token from different sources
@@ -69,6 +70,12 @@ class SocketService {
       console.log("🎉 Socket ID:", this.socket?.id)
       this.isConnected = true
       this.notifyConnectionChange(true)
+      
+      // Re-register WebRTC listeners on new socket connection
+      if (this.webrtcListenersSetup) {
+        console.log("🔄 Re-registering WebRTC listeners on socket connect...");
+        this.webrtcListenersSetup();
+      }
       
       // Emit presence update on connection
       if (this.currentUser) {
@@ -262,6 +269,16 @@ class SocketService {
 
   off(event: string, callback?: (...args: any[]) => void): void {
     this.socket?.off(event, callback)
+  }
+  
+  // Register a function to set up WebRTC listeners that will be called on each connection
+  setWebRTCListenersSetup(setupFn: () => void): void {
+    this.webrtcListenersSetup = setupFn;
+    // Also call it immediately if already connected
+    if (this.isConnected && this.socket) {
+      console.log("🔄 Socket already connected, setting up WebRTC listeners immediately...");
+      setupFn();
+    }
   }
 }
 

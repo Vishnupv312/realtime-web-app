@@ -1042,52 +1042,24 @@ const useWebRTC = (props?: UseWebRTCProps) => {
 
   // CRITICAL SECTION: WebRTC Socket Listener Setup
   // ================================================
-  // This effect sets up socket listeners for WebRTC signaling (offer, answer, ICE candidates, etc.)
+  // This effect registers the WebRTC listener setup function with socketService.
+  // The socketService will call this function whenever the socket connects or reconnects.
   // 
-  // IMPORTANT DESIGN DECISION:
-  // We do NOT clean up these listeners in the effect cleanup function.
-  // 
-  // WHY?
-  // -----
-  // When users are matched and join a room, React re-renders the chat component multiple times.
-  // Each re-render can trigger React's cleanup functions, which would remove our socket listeners.
-  // With the listenersSetupRef check, we prevent re-registration, BUT this creates a critical bug:
-  // 
-  // Bug Scenario (First Connection):
-  // 1. Component mounts → Listeners registered → listenersSetupRef = true
-  // 2. Users match → Component re-renders multiple times
-  // 3. React cleanup runs → Listeners removed (but listenersSetupRef still = true)
-  // 4. Effect runs again → Skipped due to listenersSetupRef check
-  // 5. Caller sends offer → Receiver has NO listeners → Call fails ❌
-  // 
-  // After Refresh (Success):
-  // 1. Page reloads → listenersSetupRef resets to false
-  // 2. Component mounts → Listeners registered fresh
-  // 3. No cleanup between match and call → Listeners remain active
-  // 4. Caller sends offer → Receiver receives it → Call succeeds ✅
-  // 
-  // SOLUTION:
-  // Remove the cleanup function entirely. Let listeners persist for the entire socket connection.
-  // This matches the pattern used in ChatContext for chat message listeners.
-  // Listeners will naturally be cleaned up when:
-  // - Page is refreshed/closed
-  // - Socket disconnects
-  // - User navigates away from the app
+  // WHY THIS APPROACH?
+  // ------------------
+  // The socket instance gets recreated when users connect/reconnect. If we register
+  // listeners only once, they'll be attached to a stale socket instance.
+  // By registering the setup function with socketService, listeners are automatically
+  // re-registered on every socket connection, ensuring they're always on the active socket.
   useEffect(() => {
-    // Prevent duplicate listener registration on re-renders
-    if (listenersSetupRef.current) {
-      console.log("⚠️ WebRTC listeners already set up, skipping duplicate setup");
-      return;
-    }
+    console.log("🔌 Registering WebRTC listener setup with socketService...");
     
-    console.log("🔌 Setting up WebRTC socket listeners...");
-    setupSocketListeners();
-    listenersSetupRef.current = true;
+    // Register the setup function to be called on every socket connection
+    socketService.setWebRTCListenersSetup(setupSocketListeners);
     
-    // NO CLEANUP FUNCTION - Listeners persist for entire socket lifetime
-    // This is intentional and fixes the "first connection fails" bug
+    // No cleanup needed - socketService manages the lifecycle
     return undefined;
-  }, [setupSocketListeners]); // Depends on setupSocketListeners which is stable
+  }, [setupSocketListeners]); // Only re-register if setupSocketListeners changes (which it won't due to useCallback)
 
   return {
     localStream,
