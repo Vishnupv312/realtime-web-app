@@ -8,10 +8,12 @@
 **Root Cause**: When `videoTrack.enabled = false`, the video element still displays the stream but shows a black/blank frame because no video data is being transmitted.
 
 **Solution**: 
+- Changed remote video detection to use both `videoTrack.enabled` AND `videoTrack.muted` properties
+- Added event listeners for `mute` and `unmute` events on the video track (these fire when remote user toggles camera)
+- Added polling as a backup mechanism (200ms intervals) for browser compatibility
+- The `mute` event fires when a track stops sending data, which happens when `enabled = false`
 - Added placeholder UI in the local video preview when camera is off
 - Shows user avatar, username initials, and a "camera off" icon
-- Uses a gradient background similar to the main remote video placeholder
-- The remote side already had placeholder logic (lines 213-228), but the local preview needed the same treatment
 
 ### 2. Local Preview Not Showing When Camera is Turned Back On
 **Problem**: After turning the camera off and then back on, the local video preview remains blank even though the camera is enabled.
@@ -20,9 +22,10 @@
 
 **Solution**:
 - Added a new `useEffect` hook that monitors the `isVideoOff` state
-- When video is turned back on (`!isVideoOff && videoTrack.enabled`), it explicitly calls `play()` on the local video element
-- Added event handlers (`onLoadedMetadata`, `onPlaying`) for better debugging
-- Ensures the video element properly restarts playback when the track is re-enabled
+- Force refresh the video element by temporarily clearing and resetting `srcObject`
+- Added 50ms delay to ensure the browser processes the change
+- When video is turned back on, explicitly calls `play()` after restoring the stream
+- This approach works reliably across all browsers, especially mobile Safari
 
 ## Changes Made
 
@@ -33,25 +36,31 @@
    currentUserId?: string
    ```
 
-2. **Enhanced local video stream effect** (lines 66-71):
+2. **Enhanced local video stream effect** (lines 68-74):
    - Now explicitly calls `play()` when stream is attached
    - Ensures video element starts playing immediately
 
-3. **New effect to handle video toggle** (lines 74-85):
+3. **New effect to handle video toggle** (lines 76-102):
    - Monitors `isVideoOff` state changes
-   - Restarts video playback when camera is turned back on
+   - Force refreshes video element by clearing/resetting `srcObject`
+   - 50ms delay ensures browser processes the change
    - Critical for mobile browser compatibility
 
-4. **Updated local video preview UI** (lines 314-322):
+4. **Enhanced remote video track monitoring** (lines 104-158):
+   - Added `mute` and `unmute` event listeners (fires when remote user toggles camera)
+   - Check both `enabled` AND `muted` properties: `videoTrack.enabled && !videoTrack.muted`
+   - Polling every 200ms as backup for browser compatibility
+   - Comprehensive logging for debugging
+
+5. **Updated local video preview UI** (lines 320-336):
    - Changed from simple icon to full placeholder with avatar
    - Shows user initials using `currentUserId`
    - Uses gradient background matching the remote placeholder style
    - Displays camera-off icon below avatar
 
-5. **Added video event handlers** (lines 311-312):
+6. **Added video event handlers** (lines 327-328):
    - Added `onLoadedMetadata` and `onPlaying` for debugging
    - Helps track video playback state
-
 ### `/Users/vishnu/Study/Projects/Realtime Chat App/web/app/chat/page.tsx`
 
 1. **Pass currentUserId prop** (line 1151):

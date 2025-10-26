@@ -78,9 +78,24 @@ export default function VideoCallModal({
     if (localVideoRef.current && localStream) {
       const videoTrack = localStream.getVideoTracks()[0]
       if (videoTrack) {
-        // When video is turned back on, ensure the video element is playing
+        console.log(`📹 Local video state changed - isVideoOff: ${isVideoOff}, track.enabled: ${videoTrack.enabled}`)
+        
+        // When video is turned back on, force video element to refresh
         if (!isVideoOff && videoTrack.enabled) {
-          localVideoRef.current.play().catch(e => console.log('Local video play error:', e))
+          console.log('📹 Refreshing local video preview...')
+          
+          // Force refresh by temporarily clearing and resetting srcObject
+          const currentStream = localVideoRef.current.srcObject
+          localVideoRef.current.srcObject = null
+          
+          // Use setTimeout to ensure the change is processed
+          setTimeout(() => {
+            if (localVideoRef.current && currentStream) {
+              localVideoRef.current.srcObject = currentStream
+              localVideoRef.current.play().catch(e => console.log('Local video play error:', e))
+              console.log('📹 Local video preview restored')
+            }
+          }, 50)
         }
       }
     }
@@ -89,30 +104,47 @@ export default function VideoCallModal({
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       console.log('📺 VideoCallModal: Attaching remote stream to video element')
-      console.log('📺 Remote stream tracks:', remoteStream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled, readyState: t.readyState})))
+      console.log('📺 Remote stream tracks:', remoteStream.getTracks().map(t => ({kind: t.kind, enabled: t.enabled, readyState: t.readyState, muted: t.muted})))
       
       remoteVideoRef.current.srcObject = remoteStream
       
       // Monitor remote video track state
       const videoTrack = remoteStream.getVideoTracks()[0]
       if (videoTrack) {
-        // Set initial state based on enabled property (not muted)
-        setIsRemoteVideoEnabled(videoTrack.enabled)
-        console.log(`📺 Initial remote video state: enabled=${videoTrack.enabled}, muted=${videoTrack.muted}, readyState=${videoTrack.readyState}`)
+        // Set initial state - track is considered "on" if enabled AND not muted
+        const initialState = videoTrack.enabled && !videoTrack.muted
+        setIsRemoteVideoEnabled(initialState)
+        console.log(`📺 Initial remote video state: enabled=${videoTrack.enabled}, muted=${videoTrack.muted}, readyState=${videoTrack.readyState}, showing=${initialState}`)
         
-        // Poll for enabled state changes
-        // Note: We use enabled property, NOT muted property
-        // - enabled: user intentionally toggled video on/off
-        // - muted: temporary state when track isn't receiving data yet
+        // Listen for mute/unmute events (this DOES fire when remote user toggles video)
+        const handleMute = () => {
+          console.log('📺 Remote video track MUTED event fired')
+          setIsRemoteVideoEnabled(false)
+        }
+        
+        const handleUnmute = () => {
+          console.log('📺 Remote video track UNMUTED event fired')
+          setIsRemoteVideoEnabled(true)
+        }
+        
+        videoTrack.addEventListener('mute', handleMute)
+        videoTrack.addEventListener('unmute', handleUnmute)
+        
+        // Also poll as a backup (WebRTC behavior varies by browser)
         const pollInterval = setInterval(() => {
-          const currentEnabled = videoTrack.enabled
-          if (currentEnabled !== isRemoteVideoEnabled) {
-            console.log(`📺 Remote video enabled state changed: ${isRemoteVideoEnabled} -> ${currentEnabled}`)
-            setIsRemoteVideoEnabled(currentEnabled)
-          }
-        }, 500)
+          // Check both enabled and muted state
+          const currentEnabled = videoTrack.enabled && !videoTrack.muted
+          setIsRemoteVideoEnabled(prevState => {
+            if (currentEnabled !== prevState) {
+              console.log(`📺 Remote video state changed (poll): enabled=${videoTrack.enabled}, muted=${videoTrack.muted}, showing=${currentEnabled}`)
+            }
+            return currentEnabled
+          })
+        }, 200)
         
         return () => {
+          videoTrack.removeEventListener('mute', handleMute)
+          videoTrack.removeEventListener('unmute', handleUnmute)
           clearInterval(pollInterval)
         }
       }
