@@ -17,6 +17,7 @@ interface VideoCallModalProps {
     id: string
     username: string
   } | null
+  currentUserId?: string
   localStream: MediaStream | null
   remoteStream: MediaStream | null
   callType: "video" | "audio" | null
@@ -32,7 +33,8 @@ interface VideoCallModalProps {
 export default function VideoCallModal({ 
   isOpen, 
   onClose, 
-  connectedUser, 
+  connectedUser,
+  currentUserId, 
   localStream, 
   remoteStream, 
   callType, 
@@ -66,8 +68,23 @@ export default function VideoCallModal({
   useEffect(() => {
     if (localVideoRef.current && localStream) {
       localVideoRef.current.srcObject = localStream
+      // Ensure video plays when stream is attached
+      localVideoRef.current.play().catch(e => console.log('Local video play error:', e))
     }
   }, [localStream, localVideoRef])
+
+  // Update local video preview when video is toggled on/off
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      const videoTrack = localStream.getVideoTracks()[0]
+      if (videoTrack) {
+        // When video is turned back on, ensure the video element is playing
+        if (!isVideoOff && videoTrack.enabled) {
+          localVideoRef.current.play().catch(e => console.log('Local video play error:', e))
+        }
+      }
+    }
+  }, [isVideoOff, localStream, localVideoRef])
 
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
@@ -293,10 +310,17 @@ export default function VideoCallModal({
                   muted
                   className="w-full h-full object-cover"
                   style={{ transform: "scaleX(-1)" }}
+                  onLoadedMetadata={() => console.log('📹 Local video metadata loaded')}
+                  onPlaying={() => console.log('📹 Local video is now playing!')}
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center bg-gray-800">
-                  <VideoOff className="w-4 h-4 sm:w-6 sm:h-6 text-gray-400" />
+                <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-gray-800 to-gray-900">
+                  <Avatar className="h-10 w-10 sm:h-12 sm:w-12 mb-1">
+                    <AvatarFallback className="bg-gradient-to-br from-blue-600 to-purple-600 text-white text-xs">
+                      {currentUserId ? getInitials(currentUserId) : "You"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <VideoOff className="w-3 h-3 sm:w-4 sm:h-4 text-gray-400 mt-1" />
                 </div>
               )}
             </motion.div>

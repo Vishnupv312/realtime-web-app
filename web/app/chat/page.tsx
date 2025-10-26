@@ -1148,6 +1148,7 @@ export default function ChatPage() {
           isOpen={showCallModal}
           onClose={() => setShowCallModal(false)}
           connectedUser={connectedUser}
+          currentUserId={guestUser?.username}
           localStream={localStream}
           remoteStream={remoteStream}
           callType={callType}
