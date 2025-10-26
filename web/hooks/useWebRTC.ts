@@ -92,100 +92,6 @@ const useWebRTC = (props?: UseWebRTCProps) => {
     iceCandidatePoolSize: 10,
   };
 
-  // CRITICAL SECTION: WebRTC Socket Listener Setup
-  // ================================================
-  // This effect sets up socket listeners for WebRTC signaling (offer, answer, ICE candidates, etc.)
-  // 
-  // IMPORTANT DESIGN DECISION:
-  // We do NOT clean up these listeners in the effect cleanup function.
-  // 
-  // WHY?
-  // -----
-  // When users are matched and join a room, React re-renders the chat component multiple times.
-  // Each re-render can trigger React's cleanup functions, which would remove our socket listeners.
-  // With the listenersSetupRef check, we prevent re-registration, BUT this creates a critical bug:
-  // 
-  // Bug Scenario (First Connection):
-  // 1. Component mounts → Listeners registered → listenersSetupRef = true
-  // 2. Users match → Component re-renders multiple times
-  // 3. React cleanup runs → Listeners removed (but listenersSetupRef still = true)
-  // 4. Effect runs again → Skipped due to listenersSetupRef check
-  // 5. Caller sends offer → Receiver has NO listeners → Call fails ❌
-  // 
-  // After Refresh (Success):
-  // 1. Page reloads → listenersSetupRef resets to false
-  // 2. Component mounts → Listeners registered fresh
-  // 3. No cleanup between match and call → Listeners remain active
-  // 4. Caller sends offer → Receiver receives it → Call succeeds ✅
-  // 
-  // SOLUTION:
-  // Remove the cleanup function entirely. Let listeners persist for the entire socket connection.
-  // This matches the pattern used in ChatContext for chat message listeners.
-  // Listeners will naturally be cleaned up when:
-  // - Page is refreshed/closed
-  // - Socket disconnects
-  // - User navigates away from the app
-  useEffect(() => {
-    // Prevent duplicate listener registration on re-renders
-    if (listenersSetupRef.current) {
-      console.log("⚠️ WebRTC listeners already set up, skipping duplicate setup");
-      return;
-    }
-    
-    console.log("🔌 Setting up WebRTC socket listeners...");
-    setupSocketListeners();
-    listenersSetupRef.current = true;
-    
-    // NO CLEANUP FUNCTION - Listeners persist for entire socket lifetime
-    // This is intentional and fixes the "first connection fails" bug
-    return undefined;
-  }, []); // Empty dependency array - runs once on mount
-
-  /**
-   * Sets up all WebRTC socket event listeners
-   * 
-   * This function is called ONCE when the useWebRTC hook first mounts.
-   * The listeners registered here will persist for the entire socket connection.
-   * 
-   * Events handled:
-   * - webrtc:offer: Incoming call from another user
-   * - webrtc:answer: Response to our call offer
-   * - webrtc:ice-candidate: ICE candidates for NAT traversal
-   * - webrtc:call-end: Remote user ended the call
-   * - webrtc:call-reject: Remote user rejected our call
-   * - webrtc:call-timeout: Call timed out (no answer)
-   */
-  const setupSocketListeners = (): void => {
-    const timestamp = new Date().toISOString();
-    console.log(`🔌 [${timestamp}] Removing any existing WebRTC listeners...`);
-    
-    // Remove any existing listeners first to prevent duplicates
-    // This is a safety measure in case listeners were set up before
-    socketService.off("webrtc:offer");
-    socketService.off("webrtc:answer");
-    socketService.off("webrtc:ice-candidate");
-    socketService.off("webrtc:call-end");
-    socketService.off("webrtc:call-reject");
-    socketService.off("webrtc:call-timeout");
-    
-    console.log(`🔌 [${timestamp}] Registering WebRTC socket event handlers...`);
-    
-    // Register fresh listeners
-    // IMPORTANT: These listeners will NOT be removed until:
-    // 1. The page is refreshed/closed
-    // 2. The socket disconnects
-    // 3. The user navigates away
-    socketService.on("webrtc:offer", handleReceiveOffer);
-    socketService.on("webrtc:answer", handleReceiveAnswer);
-    socketService.on("webrtc:ice-candidate", handleReceiveIceCandidate);
-    socketService.on("webrtc:call-end", handleReceiveCallEnd);
-    socketService.on("webrtc:call-reject", handleReceiveCallReject);
-    socketService.on("webrtc:call-timeout", handleReceiveCallTimeout);
-    
-    console.log(`✅ [${timestamp}] WebRTC socket listeners registered successfully`);
-    console.log(`ℹ️  Listeners will persist for entire socket connection (no cleanup on component unmount)`);
-  };
-
   const createPeerConnection = (): RTCPeerConnection => {
     if (peerConnection.current) {
       peerConnection.current.close();
@@ -1083,6 +989,105 @@ const useWebRTC = (props?: UseWebRTCProps) => {
 
     console.log("✅ WebRTC cleanup completed - all tracks stopped");
   };
+
+  /**
+   * Sets up all WebRTC socket event listeners
+   * 
+   * This function is called ONCE when the useWebRTC hook first mounts.
+   * The listeners registered here will persist for the entire socket connection.
+   * 
+   * IMPORTANT: This must be defined AFTER all handler functions (handleReceiveOffer, etc.)
+   * so that the handlers are not undefined when registered.
+   * 
+   * Events handled:
+   * - webrtc:offer: Incoming call from another user
+   * - webrtc:answer: Response to our call offer
+   * - webrtc:ice-candidate: ICE candidates for NAT traversal
+   * - webrtc:call-end: Remote user ended the call
+   * - webrtc:call-reject: Remote user rejected our call
+   * - webrtc:call-timeout: Call timed out (no answer)
+   */
+  const setupSocketListeners = useCallback((): void => {
+    const timestamp = new Date().toISOString();
+    console.log(`🔌 [${timestamp}] Removing any existing WebRTC listeners...`);
+    
+    // Remove any existing listeners first to prevent duplicates
+    // This is a safety measure in case listeners were set up before
+    socketService.off("webrtc:offer");
+    socketService.off("webrtc:answer");
+    socketService.off("webrtc:ice-candidate");
+    socketService.off("webrtc:call-end");
+    socketService.off("webrtc:call-reject");
+    socketService.off("webrtc:call-timeout");
+    
+    console.log(`🔌 [${timestamp}] Registering WebRTC socket event handlers...`);
+    console.log(`   handleReceiveOffer type: ${typeof handleReceiveOffer}`);
+    console.log(`   handleReceiveAnswer type: ${typeof handleReceiveAnswer}`);
+    
+    // Register fresh listeners
+    // IMPORTANT: These listeners will NOT be removed until:
+    // 1. The page is refreshed/closed
+    // 2. The socket disconnects
+    // 3. The user navigates away
+    socketService.on("webrtc:offer", handleReceiveOffer);
+    socketService.on("webrtc:answer", handleReceiveAnswer);
+    socketService.on("webrtc:ice-candidate", handleReceiveIceCandidate);
+    socketService.on("webrtc:call-end", handleReceiveCallEnd);
+    socketService.on("webrtc:call-reject", handleReceiveCallReject);
+    socketService.on("webrtc:call-timeout", handleReceiveCallTimeout);
+    
+    console.log(`✅ [${timestamp}] WebRTC socket listeners registered successfully`);
+    console.log(`ℹ️  Listeners will persist for entire socket connection (no cleanup on component unmount)`);
+  }, [handleReceiveOffer, handleReceiveAnswer, handleReceiveIceCandidate, handleReceiveCallEnd, handleReceiveCallReject, handleReceiveCallTimeout]);
+
+  // CRITICAL SECTION: WebRTC Socket Listener Setup
+  // ================================================
+  // This effect sets up socket listeners for WebRTC signaling (offer, answer, ICE candidates, etc.)
+  // 
+  // IMPORTANT DESIGN DECISION:
+  // We do NOT clean up these listeners in the effect cleanup function.
+  // 
+  // WHY?
+  // -----
+  // When users are matched and join a room, React re-renders the chat component multiple times.
+  // Each re-render can trigger React's cleanup functions, which would remove our socket listeners.
+  // With the listenersSetupRef check, we prevent re-registration, BUT this creates a critical bug:
+  // 
+  // Bug Scenario (First Connection):
+  // 1. Component mounts → Listeners registered → listenersSetupRef = true
+  // 2. Users match → Component re-renders multiple times
+  // 3. React cleanup runs → Listeners removed (but listenersSetupRef still = true)
+  // 4. Effect runs again → Skipped due to listenersSetupRef check
+  // 5. Caller sends offer → Receiver has NO listeners → Call fails ❌
+  // 
+  // After Refresh (Success):
+  // 1. Page reloads → listenersSetupRef resets to false
+  // 2. Component mounts → Listeners registered fresh
+  // 3. No cleanup between match and call → Listeners remain active
+  // 4. Caller sends offer → Receiver receives it → Call succeeds ✅
+  // 
+  // SOLUTION:
+  // Remove the cleanup function entirely. Let listeners persist for the entire socket connection.
+  // This matches the pattern used in ChatContext for chat message listeners.
+  // Listeners will naturally be cleaned up when:
+  // - Page is refreshed/closed
+  // - Socket disconnects
+  // - User navigates away from the app
+  useEffect(() => {
+    // Prevent duplicate listener registration on re-renders
+    if (listenersSetupRef.current) {
+      console.log("⚠️ WebRTC listeners already set up, skipping duplicate setup");
+      return;
+    }
+    
+    console.log("🔌 Setting up WebRTC socket listeners...");
+    setupSocketListeners();
+    listenersSetupRef.current = true;
+    
+    // NO CLEANUP FUNCTION - Listeners persist for entire socket lifetime
+    // This is intentional and fixes the "first connection fails" bug
+    return undefined;
+  }, [setupSocketListeners]); // Depends on setupSocketListeners which is stable
 
   return {
     localStream,
