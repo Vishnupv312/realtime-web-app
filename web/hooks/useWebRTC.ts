@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import socketService from "@/lib/socket";
 import useCallLogs from "@/hooks/useCallLogs";
 import MediaUtils, { type MediaError } from "@/lib/mediaUtils";
@@ -51,6 +51,20 @@ const useWebRTC = (props?: UseWebRTCProps) => {
   const [isCaller, setIsCaller] = useState(false);
   const [mediaError, setMediaError] = useState<MediaError | null>(null);
   const [isRequestingPermissions, setIsRequestingPermissions] = useState(false);
+  const [callDuration, setCallDuration] = useState<number>(0);
+  
+  // Refs to hold latest state for event handlers (prevents stale closures)
+  const callStateRef = useRef<CallState>(callState);
+  const isCallActiveRef = useRef<boolean>(isCallActive);
+  
+  // Keep refs in sync with state
+  useEffect(() => {
+    callStateRef.current = callState;
+  }, [callState]);
+  
+  useEffect(() => {
+    isCallActiveRef.current = isCallActive;
+  }, [isCallActive]);
 
   // WebRTC state refs - these persist across re-renders but reset on unmount
   const peerConnection = useRef<RTCPeerConnection | null>(null);
@@ -718,7 +732,7 @@ const useWebRTC = (props?: UseWebRTCProps) => {
     cleanup();
   };
 
-  const handleReceiveOffer = async (data: IncomingCallData): Promise<void> => {
+  const handleReceiveOffer = useCallback(async (data: IncomingCallData): Promise<void> => {
     const timestamp = new Date().toISOString();
     console.log("📞 ===========================================");
     console.log("📞 RECEIVED WEBRTC OFFER!");
@@ -726,13 +740,14 @@ const useWebRTC = (props?: UseWebRTCProps) => {
     console.log(`📞 [${timestamp}] Offer data:`, data);
     console.log(`   From: ${data.fromUsername} (${data.from})`);
     console.log(`   Type: ${data.type}`);
-    console.log(`   Current call state: ${callState}`);
-    console.log(`   isCallActive: ${isCallActive}`);
+    console.log(`   Current call state (from ref): ${callStateRef.current}`);
+    console.log(`   isCallActive (from ref): ${isCallActiveRef.current}`);
     console.log(`   Listeners setup ref: ${listenersSetupRef.current}`);
     console.log("📞 ===========================================");
     
     // If we're already in a call, ignore the new offer
-    if (isCallActive || callState !== "idle") {
+    // CRITICAL: Use refs to get the latest state, avoiding stale closures
+    if (isCallActiveRef.current || callStateRef.current !== "idle") {
       console.warn("⚠️ Ignoring incoming call - already in a call");
       return;
     }
@@ -747,9 +762,9 @@ const useWebRTC = (props?: UseWebRTCProps) => {
     setIsIncomingCall(true);
     setIncomingCallData(data);
     console.log("✅ Incoming call state set, waiting for user to accept/reject");
-  };
+  }, []); // Empty deps - uses refs for latest state
 
-  const handleReceiveAnswer = async (data: {
+  const handleReceiveAnswer = useCallback(async (data: {
     answer: RTCSessionDescriptionInit;
   }): Promise<void> => {
     try {
@@ -795,9 +810,9 @@ const useWebRTC = (props?: UseWebRTCProps) => {
     } catch (error) {
       console.log("❌ Error handling answer:", error);
     }
-  };
+  }, []); // Empty deps - uses refs
 
-  const handleReceiveIceCandidate = async (data: {
+  const handleReceiveIceCandidate = useCallback(async (data: {
     candidate: RTCIceCandidate;
   }): Promise<void> => {
     try {
@@ -822,7 +837,7 @@ const useWebRTC = (props?: UseWebRTCProps) => {
     } catch (error) {
       console.log("❌ Error handling ICE candidate:", error);
     }
-  };
+  }, []); // Empty deps - uses refs
 
   const processQueuedIceCandidates = async (): Promise<void> => {
     if (!peerConnection.current || !peerConnection.current.remoteDescription) {
@@ -900,7 +915,7 @@ const useWebRTC = (props?: UseWebRTCProps) => {
     cleanup();
   };
 
-  const handleReceiveCallEnd = (): void => {
+  const handleReceiveCallEnd = useCallback((): void => {
     console.log("Received call end from remote user");
 
     // Clear any pending timeouts
@@ -908,7 +923,7 @@ const useWebRTC = (props?: UseWebRTCProps) => {
 
     // Log call end with duration if call was connected
     if (
-      (callState === "connected" || callState === "connecting") &&
+      (callStateRef.current === "connected" || callStateRef.current === "connecting") &&
       connectedUser &&
       currentUserId &&
       addSystemMessage &&
@@ -939,9 +954,9 @@ const useWebRTC = (props?: UseWebRTCProps) => {
     setIsCallActive(false);
     setCallState("idle");
     cleanup();
-  };
+  }, [connectedUser, currentUserId, addSystemMessage, callType, isCaller, getCallDuration]);
 
-  const handleReceiveCallReject = (): void => {
+  const handleReceiveCallReject = useCallback((): void => {
     console.log("Call was rejected by remote user");
 
     // Clear any pending timeouts
@@ -966,9 +981,9 @@ const useWebRTC = (props?: UseWebRTCProps) => {
     setIsCallActive(false);
     setCallState("idle");
     cleanup();
-  };
+  }, [callType, connectedUser, currentUserId, addSystemMessage]);
 
-  const handleReceiveCallTimeout = (): void => {
+  const handleReceiveCallTimeout = useCallback((): void => {
     console.log("Call timed out - received from remote user");
 
     // Log missed call when timeout is received (callee side)
@@ -997,7 +1012,7 @@ const useWebRTC = (props?: UseWebRTCProps) => {
     setIsCallActive(false);
     setCallState("idle");
     cleanup();
-  };
+  }, [incomingCallData, connectedUser, currentUserId, addSystemMessage]);
 
   const cleanup = (): void => {
     console.log("🧹 Cleaning up WebRTC resources...");
