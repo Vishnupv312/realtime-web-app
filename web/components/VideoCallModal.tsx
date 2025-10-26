@@ -79,32 +79,23 @@ export default function VideoCallModal({
       // Monitor remote video track state
       const videoTrack = remoteStream.getVideoTracks()[0]
       if (videoTrack) {
-        // Set initial state
+        // Set initial state based on enabled property (not muted)
         setIsRemoteVideoEnabled(videoTrack.enabled)
+        console.log(`📺 Initial remote video state: enabled=${videoTrack.enabled}, muted=${videoTrack.muted}, readyState=${videoTrack.readyState}`)
         
-        // Listen for track enabled/disabled events
-        const handleTrackMute = () => {
-          console.log('📺 Remote video track muted/disabled')
-          setIsRemoteVideoEnabled(false)
-        }
-        const handleTrackUnmute = () => {
-          console.log('📺 Remote video track unmuted/enabled')
-          setIsRemoteVideoEnabled(true)
-        }
-        
-        videoTrack.addEventListener('mute', handleTrackMute)
-        videoTrack.addEventListener('unmute', handleTrackUnmute)
-        
-        // Also poll for enabled state changes (some browsers don't fire events)
+        // Poll for enabled state changes
+        // Note: We use enabled property, NOT muted property
+        // - enabled: user intentionally toggled video on/off
+        // - muted: temporary state when track isn't receiving data yet
         const pollInterval = setInterval(() => {
-          if (videoTrack.enabled !== isRemoteVideoEnabled) {
-            setIsRemoteVideoEnabled(videoTrack.enabled)
+          const currentEnabled = videoTrack.enabled
+          if (currentEnabled !== isRemoteVideoEnabled) {
+            console.log(`📺 Remote video enabled state changed: ${isRemoteVideoEnabled} -> ${currentEnabled}`)
+            setIsRemoteVideoEnabled(currentEnabled)
           }
         }, 500)
         
         return () => {
-          videoTrack.removeEventListener('mute', handleTrackMute)
-          videoTrack.removeEventListener('unmute', handleTrackUnmute)
           clearInterval(pollInterval)
         }
       }
