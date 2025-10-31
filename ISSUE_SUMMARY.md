@@ -25,7 +25,7 @@
 - No proper retry mechanism for queued candidates
 
 ### Solution Applied
-✅ **Enhanced ICE candidate handling** (`web/hooks/useWebRTC.ts`)
+✅ **Enhanced ICE candidate handling** (`web/hooks/useWebRTC.ts`
 
 **Changes:**
 1. **Always queue ICE candidates first** (prevents race condition)
