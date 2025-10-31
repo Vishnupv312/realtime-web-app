@@ -76,8 +76,30 @@ export const GuestSessionProvider = ({ children }: { children: ReactNode }) => {
           const parsedUser = JSON.parse(stored)
           // Validate that it's a proper guest user object
           if (parsedUser && parsedUser.id && parsedUser.username) {
-            console.log('⚙️ Restored guest session:', parsedUser.username)
-            return parsedUser
+            // Check if token is expired by decoding the JWT
+            try {
+              const tokenParts = storedToken.split('.')
+              if (tokenParts.length === 3) {
+                const payload = JSON.parse(atob(tokenParts[1]))
+                const expirationTime = payload.exp * 1000 // Convert to milliseconds
+                const currentTime = Date.now()
+                
+                if (expirationTime < currentTime) {
+                  console.log('⚠️ Stored token has expired, clearing session')
+                  sessionStorage.removeItem('guest_user_session')
+                  sessionStorage.removeItem('guestAuthToken')
+                  return null
+                }
+                
+                console.log('⚙️ Restored guest session:', parsedUser.username)
+                return parsedUser
+              }
+            } catch (tokenError) {
+              console.error('Failed to decode token:', tokenError)
+              sessionStorage.removeItem('guest_user_session')
+              sessionStorage.removeItem('guestAuthToken')
+              return null
+            }
           }
         } catch (e) {
           console.error('Failed to parse stored guest session:', e)
@@ -177,6 +199,25 @@ export const GuestSessionProvider = ({ children }: { children: ReactNode }) => {
         })
       }
     }
+    
+    // Check for session changes (e.g., from socket service token regeneration)
+    const checkSessionSync = () => {
+      const storedUser = sessionStorage.getItem('guest_user_session')
+      const storedToken = sessionStorage.getItem('guestAuthToken')
+      
+      if (storedUser && storedToken) {
+        try {
+          const parsedUser = JSON.parse(storedUser)
+          // Only update if the user ID changed (indicates regeneration)
+          if (guestUser && parsedUser.id !== guestUser.id) {
+            console.log('🔄 Syncing guest session after regeneration:', parsedUser.username)
+            setGuestUser(parsedUser)
+          }
+        } catch (e) {
+          console.error('Failed to sync guest session:', e)
+        }
+      }
+    }
 
     // Register event listeners
     socketService.on('stats:update', handleStatsUpdate)
@@ -192,6 +233,7 @@ export const GuestSessionProvider = ({ children }: { children: ReactNode }) => {
     // Setup heartbeat for presence if guest user exists
     let heartbeatInterval: NodeJS.Timeout | null = null
     let sessionValidationInterval: NodeJS.Timeout | null = null
+    let sessionSyncInterval: NodeJS.Timeout | null = null
     
     if (guestUser) {
       heartbeatInterval = setInterval(() => {
@@ -218,6 +260,9 @@ export const GuestSessionProvider = ({ children }: { children: ReactNode }) => {
           }
         }
       }, 5 * 60 * 1000) // Check every 5 minutes
+      
+      // Check for session sync every 2 seconds (to catch socket regeneration)
+      sessionSyncInterval = setInterval(checkSessionSync, 2000)
     }
 
     // Cleanup
@@ -231,6 +276,9 @@ export const GuestSessionProvider = ({ children }: { children: ReactNode }) => {
       }
       if (sessionValidationInterval) {
         clearInterval(sessionValidationInterval)
+      }
+      if (sessionSyncInterval) {
+        clearInterval(sessionSyncInterval)
       }
     }
   }, [guestUser])

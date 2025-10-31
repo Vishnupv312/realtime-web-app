@@ -106,20 +106,20 @@ export default function MatchingInterface({
   return (
     <>
       {/* Main Matching Interface */}
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-2xl mx-auto px-2 sm:px-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="text-center mb-8"
+          className="text-center mb-6 sm:mb-8"
         >
-          <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Users className="w-10 h-10 text-white" />
+          <div className="w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6">
+            <Users className="w-8 h-8 sm:w-10 sm:h-10 text-white" />
           </div>
-          <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white mb-3 sm:mb-4">
             Find Your Next Chat Partner
           </h2>
-          <p className="text-lg text-gray-600 dark:text-gray-400 mb-8 text-pretty">
+          <p className="text-base sm:text-lg text-gray-600 dark:text-gray-400 mb-6 sm:mb-8 text-pretty">
             Connect with interesting people from around the world. Start a
             conversation, make new friends, or just have fun chatting!
           </p>
@@ -130,23 +130,23 @@ export default function MatchingInterface({
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8"
+          className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8"
         >
           <Card className="hover:shadow-lg transition-shadow duration-300">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+            <CardHeader className="p-3 sm:p-4 md:p-6">
+              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                 <Shuffle className="w-5 h-5 text-blue-600" />
                 Random Match
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs sm:text-sm">
                 Connect with a random person instantly
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-3 sm:p-4 md:p-6">
               <Button
                 onClick={handleStartMatching}
                 disabled={isMatching}
-                className="w-full"
+                className="w-full text-sm sm:text-base"
                 size="lg"
               >
                 {isMatching ? (
@@ -165,19 +165,19 @@ export default function MatchingInterface({
           </Card>
 
           <Card className="hover:shadow-lg transition-shadow duration-300">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
+            <CardHeader className="p-3 sm:p-4 md:p-6">
+              <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                 <Globe className="w-5 h-5 text-green-600" />
                 Global Chat
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-xs sm:text-sm">
                 Join conversations from around the world
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-3 sm:p-4 md:p-6">
               <Button
                 variant="outline"
-                className="w-full bg-transparent"
+                className="w-full bg-transparent text-sm sm:text-base"
                 size="lg"
                 disabled
               >
@@ -196,34 +196,42 @@ export default function MatchingInterface({
             transition={{ duration: 0.6, delay: 0.4 }}
           >
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
+              <CardHeader className="p-3 sm:p-4 md:p-6">
+                <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
                   <Users className="w-5 h-5" />
                   Your Profile
                 </CardTitle>
-                <CardDescription>
+                <CardDescription className="text-xs sm:text-sm">
                   This is how others will see you
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-4">
-                  <Avatar className="h-16 w-16">
-                    <AvatarFallback className="bg-blue-600 text-white text-lg">
+              <CardContent className="p-3 sm:p-4 md:p-6">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <Avatar className="h-14 w-14 sm:h-16 sm:w-16 flex-shrink-0">
+                    <AvatarFallback className="bg-blue-600 text-white text-base sm:text-lg">
                       {getInitials(guestUser.username)}
                     </AvatarFallback>
                   </Avatar>
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">
                       {guestUser.username}
                     </h3>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Badge variant="default">Guest User</Badge>
-                      <Badge variant="outline">Online</Badge>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <Badge variant="default" className="text-xs">
+                        Guest User
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        Online
+                      </Badge>
                     </div>
-                    <div className="flex items-center gap-2 mt-2 text-sm text-gray-600 dark:text-gray-400">
-                      <Clock className="w-3 h-3" />
-                      <span>
-                        Session started {new Date().toLocaleTimeString()}
+                    <div className="flex items-center gap-2 mt-2 text-xs sm:text-sm text-gray-600 dark:text-gray-400 flex-wrap">
+                      <Clock className="w-3 h-3 flex-shrink-0" />
+                      <span className="truncate">
+                        Session started{" "}
+                        {new Date().toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </span>
                     </div>
                   </div>
@@ -252,15 +260,15 @@ export default function MatchingInterface({
               }
             }}
           >
-            <DialogContent className="sm:max-w-md overflow-hidden">
+            <DialogContent className="sm:max-w-md overflow-hidden p-4 sm:p-6 w-[90vw] sm:w-full !rounded-xl">
               <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
                 transition={{ duration: 0.3, ease: "easeOut" }}
               >
-                <DialogHeader>
-                  <DialogTitle className="flex items-center justify-between">
+                <DialogHeader className="space-y-2">
+                  <DialogTitle className="flex items-center justify-between text-base sm:text-lg gap-2 flex-wrap">
                     <div className="flex items-center gap-2">
                       {matchingStage === "searching" && (
                         <>

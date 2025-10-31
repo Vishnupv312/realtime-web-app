@@ -52,7 +52,23 @@ interface FileUploadProgress {
 }
 
 export default function ChatPage() {
-  const { guestUser, initializeGuestSession, clearGuestSession, isRegenerating } = useGuestSession();
+  // Add chat-view class to body on mount
+  useEffect(() => {
+    document.documentElement.classList.add("chat-view");
+    document.body.classList.add("chat-view");
+
+    return () => {
+      document.documentElement.classList.remove("chat-view");
+      document.body.classList.remove("chat-view");
+    };
+  }, []);
+
+  const {
+    guestUser,
+    initializeGuestSession,
+    clearGuestSession,
+    isRegenerating,
+  } = useGuestSession();
   const {
     isConnected,
     connectedUser,
@@ -124,7 +140,7 @@ export default function ChatPage() {
       await initializeGuestSession(username);
       setShowUsernameModal(false);
     } catch (error) {
-      console.error('Failed to initialize guest session:', error);
+      console.error("Failed to initialize guest session:", error);
       // Keep modal open on error so user can retry
     }
   };
@@ -133,15 +149,15 @@ export default function ChatPage() {
   useEffect(() => {
     const setVH = () => {
       const vh = window.innerHeight * 0.01;
-      document.documentElement.style.setProperty('--vh', `${vh}px`);
+      document.documentElement.style.setProperty("--vh", `${vh}px`);
     };
-    
+
     const handleResize = () => {
       setVH();
       // Small delay to allow keyboard to settle
       setTimeout(checkIfNearBottom, 200);
     };
-    
+
     const handleOrientationChange = () => {
       setVH();
       // Force scroll check after orientation change
@@ -152,11 +168,11 @@ export default function ChatPage() {
         }
       }, 500);
     };
-    
+
     setVH();
-    window.addEventListener('resize', handleResize);
-    window.addEventListener('orientationchange', handleOrientationChange);
-    
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleOrientationChange);
+
     // Handle virtual keyboard on mobile
     const handleVisualViewportChange = () => {
       if (window.visualViewport) {
@@ -168,16 +184,22 @@ export default function ChatPage() {
         }, 150);
       }
     };
-    
+
     if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', handleVisualViewportChange);
+      window.visualViewport.addEventListener(
+        "resize",
+        handleVisualViewportChange
+      );
     }
-    
+
     return () => {
-      window.removeEventListener('resize', handleResize);
-      window.removeEventListener('orientationchange', handleOrientationChange);
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleOrientationChange);
       if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', handleVisualViewportChange);
+        window.visualViewport.removeEventListener(
+          "resize",
+          handleVisualViewportChange
+        );
       }
     };
   }, [messages.length]);
@@ -188,7 +210,7 @@ export default function ChatPage() {
     if (!messagesContainer) return;
 
     // Check if we should auto-scroll
-    const shouldAutoScroll = 
+    const shouldAutoScroll =
       messages.length > lastMessagesLengthRef.current && // New message added
       isNearBottomRef.current && // User is near bottom
       messages.length > 0; // Has messages
@@ -198,7 +220,7 @@ export default function ChatPage() {
       if (scrollTimeoutRef.current) {
         clearTimeout(scrollTimeoutRef.current);
       }
-      
+
       scrollTimeoutRef.current = setTimeout(() => {
         scrollToBottom(false); // Smooth scroll for new messages
       }, 100);
@@ -275,9 +297,9 @@ export default function ChatPage() {
 
   const scrollToBottom = (smooth: boolean = true): void => {
     if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ 
+      messagesEndRef.current.scrollIntoView({
         behavior: smooth ? "smooth" : "auto",
-        block: "end"
+        block: "end",
       });
     }
   };
@@ -286,11 +308,12 @@ export default function ChatPage() {
   const checkIfNearBottom = (): void => {
     const container = messagesContainerRef.current;
     if (!container) return;
-    
+
     const threshold = 100; // pixels from bottom
-    const isNearBottom = 
-      container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
-    
+    const isNearBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight <
+      threshold;
+
     isNearBottomRef.current = isNearBottom;
   };
 
@@ -306,11 +329,11 @@ export default function ChatPage() {
     sendMessage(messageInput.trim());
     setMessageInput("");
     stopTyping();
-    
+
     // Clear typing mode and unlock scroll
     setIsTypingMode(false);
     setScrollLocked(false);
-    
+
     // Always scroll to bottom when user sends a message
     isNearBottomRef.current = true;
     setTimeout(() => scrollToBottom(true), 50);
@@ -347,76 +370,89 @@ export default function ChatPage() {
     // Enable typing mode to prevent scroll interference
     setIsTypingMode(true);
     setScrollLocked(true);
-    
+
     // Mark that user is actively typing to prevent unwanted scrolling
     isNearBottomRef.current = true;
-    
+
     // Mobile-specific handling
     if (window.innerWidth <= 768) {
       // Add keyboard-visible class for CSS targeting
-      document.documentElement.classList.add('keyboard-visible');
-      
+      document.documentElement.classList.add("keyboard-visible");
+
       // Prevent any scroll adjustment during keyboard animation
       const container = messagesContainerRef.current;
       if (container) {
         // Store current scroll position to prevent jumping
         const currentScrollTop = container.scrollTop;
-        
+
         // Temporarily lock scroll position during keyboard transition
-        container.style.overflow = 'hidden';
+        container.style.overflow = "hidden";
         container.scrollTop = currentScrollTop;
-        
+
         // Re-enable scrolling after keyboard animation
         setTimeout(() => {
-          container.style.overflow = 'auto';
+          container.style.overflow = "auto";
           // Only adjust if we were at bottom
-          const isAtBottom = currentScrollTop + container.clientHeight >= container.scrollHeight - 10;
+          const isAtBottom =
+            currentScrollTop + container.clientHeight >=
+            container.scrollHeight - 10;
           if (isAtBottom) {
-            container.scrollTop = container.scrollHeight - container.clientHeight;
+            container.scrollTop =
+              container.scrollHeight - container.clientHeight;
           }
         }, 300);
       }
       return;
     }
-    
+
     // Desktop behavior
     setTimeout(() => {
       if (messages.length > 0 && !scrollLocked) {
         const container = messagesContainerRef.current;
         if (container) {
-          const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
+          const isAtBottom =
+            container.scrollHeight -
+              container.scrollTop -
+              container.clientHeight <
+            50;
           if (isAtBottom) {
-            container.scrollTop = container.scrollHeight - container.clientHeight;
+            container.scrollTop =
+              container.scrollHeight - container.clientHeight;
           }
         }
       }
     }, 150);
   };
-  
+
   // Handle input blur to re-enable scrolling
   const handleInputBlur = () => {
     // Remove keyboard-visible class
-    document.documentElement.classList.remove('keyboard-visible');
-    
+    document.documentElement.classList.remove("keyboard-visible");
+
     setTimeout(() => {
-      if (messageInput.trim() === '') {
+      if (messageInput.trim() === "") {
         setIsTypingMode(false);
         setScrollLocked(false);
       }
-      
+
       // Mobile-specific cleanup
       if (window.innerWidth <= 768) {
         const container = messagesContainerRef.current;
         if (container) {
           // Ensure scrolling is re-enabled
-          container.style.overflow = 'auto';
-          
+          container.style.overflow = "auto";
+
           // Gentle scroll to bottom if needed
           setTimeout(() => {
             if (isNearBottomRef.current) {
-              const isAtBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 50;
+              const isAtBottom =
+                container.scrollHeight -
+                  container.scrollTop -
+                  container.clientHeight <
+                50;
               if (!isAtBottom) {
-                container.scrollTop = container.scrollHeight - container.clientHeight;
+                container.scrollTop =
+                  container.scrollHeight - container.clientHeight;
               }
             }
           }, 100);
@@ -608,43 +644,48 @@ export default function ChatPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className={`message-item flex gap-3 ${isOwn ? "flex-row-reverse" : "flex-row"} ${
-          showAvatar ? "mt-4" : "mt-1"
-        }`}
+        className={`message-item flex gap-2 sm:gap-3 ${
+          isOwn ? "flex-row-reverse" : "flex-row"
+        } ${showAvatar ? "mt-4" : "mt-1"}`}
       >
         {showAvatar && !isOwn && (
-          <Avatar className="h-8 w-8">
+          <Avatar className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0">
             <AvatarFallback className="bg-gray-600 text-white text-xs">
               {getInitials(message.senderUsername)}
             </AvatarFallback>
           </Avatar>
         )}
-        {!showAvatar && !isOwn && <div className="w-8" />}
+        {!showAvatar && !isOwn && <div className="w-7 sm:w-8 flex-shrink-0" />}
 
         <div
-          className={`max-w-[280px] sm:max-w-xs lg:max-w-md ${
+          className={`max-w-[calc(100vw-60px)] xs:max-w-[250px] sm:max-w-xs lg:max-w-md ${
             isOwn ? "items-end" : "items-start"
-          } flex flex-col`}
+          } flex flex-col min-w-0`}
         >
           {showAvatar && (
             <div
-              className={`text-xs text-gray-500 mb-1 ${
+              className={`text-xs text-gray-500 mb-1 px-1 truncate ${
                 isOwn ? "text-right" : "text-left"
               }`}
             >
-              {message.senderUsername} • {formatTime(message.timestamp)}
+              <span className="truncate block">{message.senderUsername}</span>
+              <span className="text-xs opacity-75">
+                {formatTime(message.timestamp)}
+              </span>
             </div>
           )}
 
           <div
-            className={`rounded-2xl px-3 py-2 sm:px-4 text-sm sm:text-base ${
+            className={`rounded-2xl px-3 py-2 sm:px-4 text-sm sm:text-base break-words ${
               isOwn
                 ? "bg-blue-600 text-white rounded-br-md"
                 : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-md"
             }`}
           >
             {message.type === "text" && (
-              <p className="break-words">{message.content}</p>
+              <p className="break-words whitespace-pre-wrap">
+                {message.content}
+              </p>
             )}
 
             {message.type === "file" &&
@@ -795,13 +836,13 @@ export default function ChatPage() {
         )}
 
         {/* Header */}
-        <header className="border-b bg-white dark:bg-gray-900 px-3 py-2 sm:px-4 sm:py-3 flex-shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                <Button
+        <header className="border-b bg-white dark:bg-gray-900 px-2 py-2 sm:px-4 sm:py-3 flex-shrink-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <Button
                 variant="ghost"
                 size="sm"
-                className="h-8 w-8 sm:h-9 sm:w-9 p-0"
+                className="h-8 w-8 sm:h-9 sm:w-9 p-0 flex-shrink-0"
                 onClick={() => {
                   leaveRoom?.();
                   router.push("/");
@@ -812,25 +853,24 @@ export default function ChatPage() {
 
               {connectedUser ? (
                 <>
-                  <Avatar className="h-10 w-10">
-                    <AvatarFallback className="bg-blue-600 text-white">
+                  <Avatar className="h-9 w-9 flex-shrink-0">
+                    <AvatarFallback className="bg-blue-600 text-white text-xs">
                       {getInitials(connectedUser.username)}
                     </AvatarFallback>
                   </Avatar>
-                  <div>
-                    <h2 className="font-semibold text-gray-900 dark:text-white">
+                  <div className="min-w-0 flex-1">
+                    <h2 className="font-semibold text-gray-900 dark:text-white text-sm truncate">
                       {connectedUser.username}
                     </h2>
-                    <div className="flex items-center gap-2 text-sm text-gray-500">
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <div className="flex items-center gap-1 text-xs text-gray-500 flex-wrap">
+                      <div className="w-2 h-2 bg-green-500 rounded-full flex-shrink-0"></div>
                       <span>Online</span>
                       {connectedUser.location && (
                         <>
-                          <span>•</span>
-                          <MapPin className="w-3 h-3" />
-                          <span>
-                            {connectedUser.location.city},{" "}
-                            {connectedUser.location.country}
+                          <span className="hidden sm:inline">•</span>
+                          <MapPin className="w-3 h-3 hidden sm:inline" />
+                          <span className="hidden sm:inline text-xs">
+                            {connectedUser.location.city}
                           </span>
                         </>
                       )}
@@ -838,18 +878,18 @@ export default function ChatPage() {
                   </div>
                 </>
               ) : (
-                <div>
-                  <h2 className="font-semibold text-gray-900 dark:text-white">
+                <div className="min-w-0 flex-1">
+                  <h2 className="font-semibold text-gray-900 dark:text-white text-sm">
                     Chat
                   </h2>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-xs text-gray-500">
                     {isConnected ? "Ready to connect" : "Connecting..."}
                   </p>
                 </div>
               )}
             </div>
 
-            <div className="flex items-center gap-1 sm:gap-2">
+            <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
               {connectedUser && (
                 <>
                   <Button
@@ -857,7 +897,7 @@ export default function ChatPage() {
                     size="sm"
                     onClick={handleAudioCall}
                     disabled={isCallActive}
-                    className="h-8 w-8 sm:h-9 sm:w-9 p-0"
+                    className="h-8 w-8 sm:h-9 sm:w-9 p-0 hidden sm:inline-flex"
                   >
                     <Phone className="w-4 h-4" />
                   </Button>
@@ -866,7 +906,7 @@ export default function ChatPage() {
                     size="sm"
                     onClick={handleVideoCall}
                     disabled={isCallActive}
-                    className="h-8 w-8 sm:h-9 sm:w-9 p-0"
+                    className="h-8 w-8 sm:h-9 sm:w-9 p-0 hidden sm:inline-flex"
                   >
                     <Video className="w-4 h-4" />
                   </Button>
@@ -884,7 +924,11 @@ export default function ChatPage() {
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 sm:h-9 sm:w-9 p-0">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 sm:h-9 sm:w-9 p-0"
+                  >
                     <MoreVertical className="w-4 h-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -906,7 +950,10 @@ export default function ChatPage() {
                         <Trash2 className="mr-2 h-4 w-4" />
                         Clear Chat
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={handleExitChat} className="text-red-600 dark:text-red-400">
+                      <DropdownMenuItem
+                        onClick={handleExitChat}
+                        className="text-red-600 dark:text-red-400"
+                      >
                         <X className="mr-2 h-4 w-4" />
                         Exit Chat (ESC)
                       </DropdownMenuItem>
@@ -916,10 +963,14 @@ export default function ChatPage() {
                   <DropdownMenuItem onClick={() => router.push("/match")}>
                     Find New Match
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => {
-                    clearGuestSession();
-                    router.push("/");
-                  }}>Change Username</DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() => {
+                      clearGuestSession();
+                      router.push("/");
+                    }}
+                  >
+                    Change Username
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -927,13 +978,11 @@ export default function ChatPage() {
         </header>
 
         {/* Messages Area */}
-        <div 
+        <div
           ref={messagesContainerRef}
           className={`chat-messages message-list ${
-            scrollLocked ? 'scroll-locked' : ''
-          } ${
-            isTypingMode ? 'typing-mode' : ''
-          }`}
+            scrollLocked ? "scroll-locked" : ""
+          } ${isTypingMode ? "typing-mode" : ""}`}
           onScroll={scrollLocked ? undefined : handleScroll}
         >
           {!connectedUser && !isMatching && (
@@ -951,8 +1000,8 @@ export default function ChatPage() {
               <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mb-4 sm:mb-6">
                 Find a random person to start chatting with
               </p>
-              <Button 
-                onClick={requestMatch} 
+              <Button
+                onClick={requestMatch}
                 disabled={isMatching}
                 className="text-sm sm:text-base px-4 py-2 sm:px-6 sm:py-3"
               >
@@ -998,25 +1047,29 @@ export default function ChatPage() {
         {connectedUser && (
           <div className="px-3 py-1 text-center">
             <p className="text-xs text-gray-400 dark:text-gray-600">
-              Press <kbd className="px-1 py-0.5 text-xs font-mono bg-gray-100 dark:bg-gray-800 rounded">ESC</kbd> to exit chat
+              Press{" "}
+              <kbd className="px-1 py-0.5 text-xs font-mono bg-gray-100 dark:bg-gray-800 rounded">
+                ESC
+              </kbd>{" "}
+              to exit chat
             </p>
           </div>
         )}
 
         {/* Input Area */}
         {connectedUser && (
-          <div className="chat-input-area chat-input-container px-3 py-3 sm:px-4 sm:py-4 dark:bg-gray-900">
+          <div className="chat-input-area chat-input-container">
             {fileUpload && (
-              <div className="mb-3 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Paperclip className="w-4 h-4 text-blue-600" />
-                    <span className="text-sm text-blue-600">
+              <div className="mb-2 p-2 sm:p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <Paperclip className="w-4 h-4 text-blue-600 flex-shrink-0" />
+                    <span className="text-xs sm:text-sm text-blue-600 truncate">
                       {fileUpload.file.name}
                     </span>
                   </div>
                   {fileUpload.uploading && (
-                    <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-600 flex-shrink-0" />
                   )}
                 </div>
               </div>
@@ -1040,35 +1093,36 @@ export default function ChatPage() {
                 type="button"
                 variant="ghost"
                 size="sm"
+                className="h-9 w-9 sm:h-10 sm:w-10 p-0 flex-shrink-0"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={!!fileUpload}
               >
                 <Paperclip className="w-4 h-4" />
               </Button>
 
-              <div className="flex-1 relative">
+              <div className="flex-1 relative min-w-0">
                 <Input
                   value={messageInput}
                   onChange={handleInputChange}
                   onFocus={handleInputFocus}
                   onBlur={handleInputBlur}
-                  placeholder="Type a message..."
-                  className="chat-input pr-12"
+                  placeholder="Message..."
+                  className="chat-input pr-10 h-9 sm:h-10 text-sm"
                   disabled={!!fileUpload}
                   autoComplete="off"
                   autoCorrect="off"
                   autoCapitalize="sentences"
                   style={{
-                    fontSize: '16px', // Prevent zoom on iOS Safari
-                    WebkitAppearance: 'none',
-                    borderRadius: '8px'
+                    fontSize: "16px", // Prevent zoom on iOS Safari
+                    WebkitAppearance: "none",
+                    borderRadius: "8px",
                   }}
                 />
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="absolute right-1 top-1/2 -translate-y-1/2"
+                  className="absolute right-0.5 top-1/2 -translate-y-1/2 h-8 w-8 p-0"
                   onMouseDown={startVoiceRecording}
                   onMouseUp={stopVoiceRecording}
                   onMouseLeave={stopVoiceRecording}
@@ -1083,6 +1137,8 @@ export default function ChatPage() {
               <Button
                 type="submit"
                 disabled={!messageInput.trim() || !!fileUpload}
+                size="sm"
+                className="h-9 w-9 sm:h-10 sm:w-10 p-0 flex-shrink-0"
               >
                 <Send className="w-4 h-4" />
               </Button>
@@ -1091,8 +1147,17 @@ export default function ChatPage() {
         )}
 
         {/* Matching Dialog */}
-        <Dialog open={showMatchDialog} onOpenChange={setShowMatchDialog}>
-          <DialogContent className="sm:max-w-md">
+        <Dialog 
+          open={showMatchDialog} 
+          onOpenChange={(open) => {
+            setShowMatchDialog(open);
+            // Redirect to home when dialog closes
+            if (!open) {
+              router.push("/");
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-md w-[90vw] sm:w-full !rounded-xl">
             <DialogHeader>
               <DialogTitle>Finding a Chat Partner</DialogTitle>
               <DialogDescription>

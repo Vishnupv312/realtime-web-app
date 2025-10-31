@@ -142,6 +142,10 @@ video {
 /* Mobile viewport fix */
 html, body {
   height: 100%;
+}
+
+/* Only disable overflow on chat pages, not main pages */
+html.chat-view, body.chat-view {
   overflow: hidden;
 }
 
@@ -173,9 +177,9 @@ html, body {
   }
 }
 
-/* Prevent body scroll on mobile */
+/* Prevent body scroll on mobile - only for chat pages */
 @media (max-width: 768px) {
-  body {
+  body.chat-view {
     position: fixed;
     width: 100%;
     height: 100%;
@@ -339,6 +343,15 @@ html, body {
     backface-visibility: hidden;
     /* Prevent layout shift */
     contain: layout style;
+    padding: 12px 12px 12px 12px !important;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  
+  /* Dark mode input container */
+  .dark .chat-input-container {
+    background: rgb(17, 24, 39);
+    border-top-color: rgb(55, 65, 81);
   }
   
   /* Input field optimizations */
@@ -363,6 +376,8 @@ html, body {
   /* Message area padding adjustment for fixed input */
   .chat-messages {
     padding-bottom: 80px; /* Space for fixed input */
+    padding-left: 12px;
+    padding-right: 12px;
   }
   
   /* File preview stability */
@@ -377,6 +392,8 @@ html, body {
   /* Stable avatar rendering */
   .message-item {
     contain: layout style;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
   }
   
   /* Improved visual viewport handling */

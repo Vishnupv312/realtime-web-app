@@ -56,7 +56,7 @@ const uploadLimiter = createRateLimiter(
 
 // CORS configuration
 // Put your LAN IP here
-const DEV_LAN_IP = "10.231.53.148";
+const DEV_LAN_IP = "10.109.44.148";
 
 // CORS configuration
 const corsOptions = {

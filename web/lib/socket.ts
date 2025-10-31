@@ -1,5 +1,6 @@
 import { io, type Socket } from "socket.io-client"
 import Cookies from "js-cookie"
+import { guestAPI } from "./api"
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001"
 console.log('🔧 Socket URL:', SOCKET_URL)
@@ -18,6 +19,7 @@ class SocketService {
   private connectionCallbacks: ((connected: boolean) => void)[] = []
   private currentUser: any = null
   private webrtcListenersSetup: (() => void) | null = null
+  private isRegeneratingToken = false
 
   connect(guestUser?: GuestUser): Socket {
     // Try to get token from different sources
@@ -93,7 +95,7 @@ class SocketService {
       this.updateOnlineStatus(false)
     })
 
-    this.socket.on("connect_error", (error) => {
+    this.socket.on("connect_error", async (error) => {
       console.error("❌ Connection error:", {
         message: error.message,
         description: error.description,
@@ -102,6 +104,12 @@ class SocketService {
       })
       this.isConnected = false
       this.notifyConnectionChange(false)
+      
+      // Handle token expiration
+      if (error.message === "Token has expired" && !this.isRegeneratingToken) {
+        console.log("🔄 Detected expired token on socket connection, regenerating...")
+        await this.handleTokenExpiration()
+      }
     })
     
     this.socket.on("reconnect", (attemptNumber) => {
@@ -278,6 +286,81 @@ class SocketService {
     if (this.isConnected && this.socket) {
       console.log("🔄 Socket already connected, setting up WebRTC listeners immediately...");
       setupFn();
+    }
+  }
+  
+  // Handle token expiration and regenerate session
+  private async handleTokenExpiration(): Promise<void> {
+    if (this.isRegeneratingToken) {
+      console.log("⏳ Token regeneration already in progress, skipping...")
+      return
+    }
+    
+    this.isRegeneratingToken = true
+    
+    try {
+      console.log("🧹 Clearing expired session data...")
+      // Clear expired token and session data
+      sessionStorage.removeItem("guestAuthToken")
+      sessionStorage.removeItem("guest_user_session")
+      
+      // Get device ID from localStorage
+      const deviceId = localStorage.getItem("guest_deviceId")
+      
+      // Generate new username
+      const GUEST_ADJECTIVES = [
+        "Cool", "Happy", "Smart", "Brave", "Kind", "Quick", "Bright", "Calm", "Swift", "Bold"
+      ]
+      const GUEST_NOUNS = [
+        "Panda", "Tiger", "Eagle", "Wolf", "Fox", "Bear", "Lion", "Shark", "Hawk", "Owl"
+      ]
+      const randomAdjective = GUEST_ADJECTIVES[Math.floor(Math.random() * GUEST_ADJECTIVES.length)]
+      const randomNoun = GUEST_NOUNS[Math.floor(Math.random() * GUEST_NOUNS.length)]
+      const randomNumber = Math.floor(Math.random() * 9999) + 1
+      const newUsername = `${randomAdjective}${randomNoun}${randomNumber}`
+      
+      console.log("🔄 Creating new guest session with username:", newUsername)
+      
+      // Create new guest session
+      const response = await guestAPI.createSession({ username: newUsername })
+      
+      if (response.data.success && response.data.data.token) {
+        // Store new token
+        sessionStorage.setItem("guestAuthToken", response.data.data.token)
+        
+        // Store new guest user data
+        const newGuestUser = {
+          id: response.data.data.user.id,
+          username: response.data.data.user.username,
+          isOnline: true,
+          lastSeen: new Date().toISOString(),
+          deviceId: deviceId || "",
+          isSearching: false,
+          connectedUser: null
+        }
+        sessionStorage.setItem("guest_user_session", JSON.stringify(newGuestUser))
+        
+        console.log("✅ New guest session created:", newGuestUser.username)
+        
+        // Update current user
+        this.currentUser = {
+          id: newGuestUser.id,
+          username: newGuestUser.username,
+          deviceId: newGuestUser.deviceId,
+          isGuest: true
+        }
+        
+        // Reconnect with new token
+        console.log("🔌 Reconnecting with new token...")
+        this.disconnect()
+        this.connect(this.currentUser)
+      } else {
+        console.error("❌ Failed to create new guest session")
+      }
+    } catch (error) {
+      console.error("❌ Error during token regeneration:", error)
+    } finally {
+      this.isRegeneratingToken = false
     }
   }
 }
