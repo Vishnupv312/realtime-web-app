@@ -175,97 +175,98 @@ export default function ChatPage() {
   }, [isConnected, guestUser, connectedUser, isMatching, router]);
 
   // Dynamically adjust padding based on input area height
-  useEffect(() => {
-    const adjustPadding = () => {
-      const inputArea = document.querySelector(
-        ".chat-input-container"
-      ) as HTMLElement;
-      const messagesArea = messagesContainerRef.current;
+  // useEffect(() => {
+  //   const adjustPadding = () => {
+  //     const inputArea = document.querySelector(
+  //       ".chat-input-container"
+  //     ) as HTMLElement;
+  //     const messagesArea = messagesContainerRef.current;
 
-      if (inputArea && messagesArea) {
-        const inputHeight = inputArea.offsetHeight;
-        const isMobile = window.innerWidth <= 768;
-        const isSmallMobile = window.innerWidth <= 375;
+  //     if (inputArea && messagesArea) {
+  //       const inputHeight = inputArea.offsetHeight;
+  //       const isMobile = window.innerWidth <= 768;
+  //       const isSmallMobile = window.innerWidth <= 375;
 
-        // Reduced padding values
-        let extraPadding = 30; // Desktop default
+  //       // Reduced padding values
+  //       let extraPadding = 30; // Desktop default
 
-        if (isSmallMobile) {
-          extraPadding = 40; // Small mobile
-        } else if (isMobile) {
-          extraPadding = 35; // Regular mobile
-        }
+  //       if (isSmallMobile) {
+  //         extraPadding = 40; // Small mobile
+  //       } else if (isMobile) {
+  //         extraPadding = 35; // Regular mobile
+  //       }
 
-        const paddingBottom = inputHeight + extraPadding;
+  //       const paddingBottom = inputHeight;
+  //       // + extraPadding;
 
-        // Apply padding to messages container
-        messagesArea.style.paddingBottom = `${paddingBottom}px`;
+  //       // Apply padding to messages container
+  //       // messagesArea.style.paddingBottom = `${paddingBottom}px`;
 
-        console.log(
-          `📏 Perfect padding: ${paddingBottom}px (input: ${inputHeight}px, extra: ${extraPadding}px)`
-        );
-      }
-    };
+  //       console.log(
+  //         `📏 Perfect padding: ${paddingBottom}px (input: ${inputHeight}px, extra: ${extraPadding}px)`
+  //       );
+  //     }
+  //   };
 
-    // Multiple adjustment attempts
-    const delays = [0, 50, 100, 200, 300, 500, 800];
-    const timeoutIds = delays.map((delay) => setTimeout(adjustPadding, delay));
+  //   // Multiple adjustment attempts
+  //   const delays = [0, 50, 100, 200, 300, 500, 800];
+  //   const timeoutIds = delays.map((delay) => setTimeout(adjustPadding, delay));
 
-    // Resize handler
-    let resizeTimeout: NodeJS.Timeout;
-    const handleResize = () => {
-      clearTimeout(resizeTimeout);
-      resizeTimeout = setTimeout(() => {
-        adjustPadding();
-        setTimeout(checkIfNearBottom, 150);
-      }, 200);
-    };
+  //   // Resize handler
+  //   let resizeTimeout: NodeJS.Timeout;
+  //   const handleResize = () => {
+  //     clearTimeout(resizeTimeout);
+  //     resizeTimeout = setTimeout(() => {
+  //       adjustPadding();
+  //       setTimeout(checkIfNearBottom, 150);
+  //     }, 200);
+  //   };
 
-    window.addEventListener("resize", handleResize);
+  //   window.addEventListener("resize", handleResize);
 
-    // ResizeObserver for input area
-    const inputArea = document.querySelector(".chat-input-container");
-    const resizeObserver = inputArea
-      ? new ResizeObserver(() => {
-          adjustPadding();
-          setTimeout(adjustPadding, 100);
-          setTimeout(adjustPadding, 300);
-        })
-      : null;
+  //   // ResizeObserver for input area
+  //   const inputArea = document.querySelector(".chat-input-container");
+  //   const resizeObserver = inputArea
+  //     ? new ResizeObserver(() => {
+  //         adjustPadding();
+  //         setTimeout(adjustPadding, 100);
+  //         setTimeout(adjustPadding, 300);
+  //       })
+  //     : null;
 
-    if (inputArea && resizeObserver) {
-      resizeObserver.observe(inputArea);
-    }
+  //   if (inputArea && resizeObserver) {
+  //     resizeObserver.observe(inputArea);
+  //   }
 
-    return () => {
-      timeoutIds.forEach(clearTimeout);
-      clearTimeout(resizeTimeout);
-      window.removeEventListener("resize", handleResize);
-      resizeObserver?.disconnect();
-    };
-  }, [connectedUser, messages.length]);
+  //   return () => {
+  //     timeoutIds.forEach(clearTimeout);
+  //     clearTimeout(resizeTimeout);
+  //     window.removeEventListener("resize", handleResize);
+  //     resizeObserver?.disconnect();
+  //   };
+  // }, [connectedUser, messages.length]);
   // Also adjust padding when messages change
-  useEffect(() => {
-    const adjustPadding = () => {
-      const inputArea = document.querySelector(
-        ".chat-input-container"
-      ) as HTMLElement;
-      const messagesArea = messagesContainerRef.current;
+  // useEffect(() => {
+  //   const adjustPadding = () => {
+  //     const inputArea = document.querySelector(
+  //       ".chat-input-container"
+  //     ) as HTMLElement;
+  //     const messagesArea = messagesContainerRef.current;
 
-      if (inputArea && messagesArea) {
-        const inputHeight = inputArea.offsetHeight;
-        const isMobile = window.innerWidth <= 768;
-        const extraPadding = isMobile ? 35 : 30;
-        const paddingBottom = inputHeight + extraPadding;
-        messagesArea.style.paddingBottom = `${paddingBottom}px`;
-      }
-    };
+  //     if (inputArea && messagesArea) {
+  //       const inputHeight = inputArea.offsetHeight;
+  //       const isMobile = window.innerWidth <= 768;
+  //       const extraPadding = isMobile ? 35 : 30;
+  //       const paddingBottom = inputHeight + extraPadding;
+  //       messagesArea.style.paddingBottom = `${paddingBottom}px`;
+  //     }
+  //   };
 
-    // Adjust padding when new message arrives
-    if (messages.length > 0) {
-      setTimeout(adjustPadding, 50);
-    }
-  }, [messages.length]);
+  //   // Adjust padding when new message arrives
+  //   if (messages.length > 0) {
+  //     setTimeout(adjustPadding, 50);
+  //   }
+  // }, [messages.length]);
 
   const handleUsernameComplete = async (username: string) => {
     try {
@@ -1344,7 +1345,7 @@ export default function ChatPage() {
               </div>
             </motion.div>
           )}
-          {/* <div ref={messagesEndRef} className="h-12 sm:h-14" />{" "} */}
+          <div ref={messagesEndRef} className="h-12 sm:h-14" />{" "}
           {/* 56px on mobile, 48px on desktop */} {/* Taller on mobile */}
           {/* Scroll to Bottom Button - WhatsApp Style */}
           {showScrollButton && connectedUser && (

@@ -366,7 +366,7 @@ body.chat-view {
     -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
     /* Add padding for fixed input - extra space to prevent cutoff */
-    padding-bottom: 140px !important;
+    /* padding-bottom: 140px !important; */
   }
 
   /* Extra bottom padding for message list on mobile */
@@ -585,9 +585,9 @@ body.chat-view {
 /* OPTIMIZED FIX: Perfect spacing for messages above input */
 @media (max-width: 768px) {
   /* Optimal padding for messages */
-  .chat-messages.message-list {
-    padding-bottom: 70px !important; /* Increased from 120px */
-  }
+  /* .chat-messages.message-list {
+    padding-bottom: 70px !important;
+  } */
 
   /* Typing indicator spacing */
   .chat-messages > div:has(.animate-bounce) {
@@ -614,9 +614,9 @@ body.chat-view {
 
 /* Extra small mobile devices */
 @media (max-width: 375px) {
-  .chat-messages.message-list {
+  /* .chat-messages.message-list {
     padding-bottom: 170px !important;
-  }
+  } */
 
   .message-item:last-of-type {
     margin-bottom: 50px !important;
@@ -625,10 +625,10 @@ body.chat-view {
 
 /* When keyboard is visible */
 @media (max-width: 768px) {
-  html.keyboard-visible .chat-messages,
+  /* html.keyboard-visible .chat-messages,
   body.keyboard-visible .chat-messages {
     padding-bottom: 160px !important;
-  }
+  } */
 
   html.keyboard-visible .message-item:last-of-type,
   body.keyboard-visible .message-item:last-of-type {
