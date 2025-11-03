@@ -218,11 +218,29 @@ export const GuestSessionProvider = ({ children }: { children: ReactNode }) => {
         }
       }
     }
+    
+    // Listen for session expiration events from socket service
+    const handleSessionExpired = () => {
+      console.log('⚠️ Session expired event received')
+      setIsRegenerating(true)
+    }
+    
+    const handleSessionRegenerated = (event: any) => {
+      console.log('✅ Session regenerated event received:', event.detail?.user?.username)
+      setIsRegenerating(false)
+      if (event.detail?.user) {
+        setGuestUser(event.detail.user)
+      }
+    }
 
-    // Register event listeners
+    // Register socket event listeners
     socketService.on('stats:update', handleStatsUpdate)
     socketService.on('users:online:update', handleOnlineUsersUpdate)
     socketService.on('presence:update', handlePresenceUpdate)
+    
+    // Register window event listeners for session management
+    window.addEventListener('guest:session:expired', handleSessionExpired)
+    window.addEventListener('guest:session:regenerated', handleSessionRegenerated)
 
     // Request initial data
     if (socketService.getConnectionStatus()) {
@@ -270,6 +288,9 @@ export const GuestSessionProvider = ({ children }: { children: ReactNode }) => {
       socketService.off('stats:update', handleStatsUpdate)
       socketService.off('users:online:update', handleOnlineUsersUpdate)
       socketService.off('presence:update', handlePresenceUpdate)
+      
+      window.removeEventListener('guest:session:expired', handleSessionExpired)
+      window.removeEventListener('guest:session:regenerated', handleSessionRegenerated)
       
       if (heartbeatInterval) {
         clearInterval(heartbeatInterval)

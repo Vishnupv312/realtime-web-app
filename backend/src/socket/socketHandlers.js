@@ -44,6 +44,31 @@ function createSocketHandlers(io) {
         sessionId: sessionId
       });
       
+      // Check if guest session has a connected user but that user is no longer online
+      const guestSession = await getGuestBySessionId(sessionId);
+      if (guestSession && guestSession.connectedUser) {
+        const connectedUserSocketId = userSockets.get(guestSession.connectedUser);
+        
+        // If the connected user is not online anymore, clean up the stale connection
+        if (!connectedUserSocketId) {
+          logger.info(`Cleaning up stale connection for ${user.username} - partner ${guestSession.connectedUser} is offline`);
+          
+          // Notify the reconnecting user that their chat has closed
+          socket.emit('room:closed', {
+            userId: guestSession.connectedUser,
+            username: 'Your chat partner',
+            message: 'The other user has left. Room closed.',
+            reason: 'partner_offline'
+          });
+          
+          // Clear the connection in the database
+          await updateGuestPresence(sessionId, {
+            connectedUser: null,
+            inChat: false
+          });
+        }
+      }
+      
       // Broadcast updated statistics to all connected clients
       await broadcastUserStats();
 

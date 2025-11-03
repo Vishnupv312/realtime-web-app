@@ -37,6 +37,10 @@ import {
   MapPin,
   Loader2,
   X,
+  ChevronDown,
+  Check,
+  CheckCheck,
+  Clock,
 } from "lucide-react";
 import { motion } from "framer-motion";
 import { fileAPI } from "@/lib/api";
@@ -116,9 +120,12 @@ export default function ChatPage() {
   const [isTypingMode, setIsTypingMode] = useState(false);
   const [scrollLocked, setScrollLocked] = useState(false);
   const [showUsernameModal, setShowUsernameModal] = useState(false);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const messageInputRef = useRef<HTMLInputElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -135,6 +142,131 @@ export default function ChatPage() {
     }
   }, [guestUser]);
 
+  // Redirect to home if connection was cleared after reconnection
+  useEffect(() => {
+    // Only redirect if:
+    // 1. Socket is connected (not in middle of reconnecting)
+    // 2. Guest user exists
+    // 3. No connected user (chat was cleared)
+    // 4. Not currently matching
+    if (isConnected && guestUser && !connectedUser && !isMatching) {
+      // Check if we just reconnected (was disconnected recently)
+      const wasRecentlyDisconnected =
+        sessionStorage.getItem("was_disconnected");
+
+      if (wasRecentlyDisconnected === "true") {
+        console.log("🔄 Redirecting to home after stale chat was cleared");
+        sessionStorage.removeItem("was_disconnected");
+
+        // Small delay to show any system messages
+        setTimeout(() => {
+          router.push("/");
+        }, 1500);
+      }
+    }
+
+    // Track disconnection state
+    if (!isConnected) {
+      sessionStorage.setItem("was_disconnected", "true");
+    } else if (connectedUser) {
+      // If we have an active chat, clear the disconnection flag
+      sessionStorage.removeItem("was_disconnected");
+    }
+  }, [isConnected, guestUser, connectedUser, isMatching, router]);
+
+  // Dynamically adjust padding based on input area height
+  useEffect(() => {
+    const adjustPadding = () => {
+      const inputArea = document.querySelector(
+        ".chat-input-container"
+      ) as HTMLElement;
+      const messagesArea = messagesContainerRef.current;
+
+      if (inputArea && messagesArea) {
+        const inputHeight = inputArea.offsetHeight;
+        const isMobile = window.innerWidth <= 768;
+        const isSmallMobile = window.innerWidth <= 375;
+
+        // Reduced padding values
+        let extraPadding = 30; // Desktop default
+
+        if (isSmallMobile) {
+          extraPadding = 40; // Small mobile
+        } else if (isMobile) {
+          extraPadding = 35; // Regular mobile
+        }
+
+        const paddingBottom = inputHeight + extraPadding;
+
+        // Apply padding to messages container
+        messagesArea.style.paddingBottom = `${paddingBottom}px`;
+
+        console.log(
+          `📏 Perfect padding: ${paddingBottom}px (input: ${inputHeight}px, extra: ${extraPadding}px)`
+        );
+      }
+    };
+
+    // Multiple adjustment attempts
+    const delays = [0, 50, 100, 200, 300, 500, 800];
+    const timeoutIds = delays.map((delay) => setTimeout(adjustPadding, delay));
+
+    // Resize handler
+    let resizeTimeout: NodeJS.Timeout;
+    const handleResize = () => {
+      clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(() => {
+        adjustPadding();
+        setTimeout(checkIfNearBottom, 150);
+      }, 200);
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    // ResizeObserver for input area
+    const inputArea = document.querySelector(".chat-input-container");
+    const resizeObserver = inputArea
+      ? new ResizeObserver(() => {
+          adjustPadding();
+          setTimeout(adjustPadding, 100);
+          setTimeout(adjustPadding, 300);
+        })
+      : null;
+
+    if (inputArea && resizeObserver) {
+      resizeObserver.observe(inputArea);
+    }
+
+    return () => {
+      timeoutIds.forEach(clearTimeout);
+      clearTimeout(resizeTimeout);
+      window.removeEventListener("resize", handleResize);
+      resizeObserver?.disconnect();
+    };
+  }, [connectedUser, messages.length]);
+  // Also adjust padding when messages change
+  useEffect(() => {
+    const adjustPadding = () => {
+      const inputArea = document.querySelector(
+        ".chat-input-container"
+      ) as HTMLElement;
+      const messagesArea = messagesContainerRef.current;
+
+      if (inputArea && messagesArea) {
+        const inputHeight = inputArea.offsetHeight;
+        const isMobile = window.innerWidth <= 768;
+        const extraPadding = isMobile ? 35 : 30;
+        const paddingBottom = inputHeight + extraPadding;
+        messagesArea.style.paddingBottom = `${paddingBottom}px`;
+      }
+    };
+
+    // Adjust padding when new message arrives
+    if (messages.length > 0) {
+      setTimeout(adjustPadding, 50);
+    }
+  }, [messages.length]);
+
   const handleUsernameComplete = async (username: string) => {
     try {
       await initializeGuestSession(username);
@@ -145,21 +277,56 @@ export default function ChatPage() {
     }
   };
 
-  // Handle dynamic viewport height for mobile browsers (especially iOS Safari)
+  // Handle dynamic viewport height and keyboard detection for mobile
   useEffect(() => {
     const setVH = () => {
       const vh = window.innerHeight * 0.01;
       document.documentElement.style.setProperty("--vh", `${vh}px`);
     };
 
+    const updateViewportHeight = () => {
+      if (window.visualViewport) {
+        // Get the actual visible viewport height (excludes keyboard)
+        const viewportHeight = window.visualViewport.height;
+        const windowHeight = window.innerHeight;
+
+        // Calculate keyboard height
+        const keyboardHeight = windowHeight - viewportHeight;
+
+        // Set CSS custom properties
+        document.documentElement.style.setProperty(
+          "--viewport-height",
+          `${viewportHeight}px`
+        );
+        document.documentElement.style.setProperty(
+          "--keyboard-height",
+          `${keyboardHeight}px`
+        );
+
+        // Update vh for fallback
+        const vh = viewportHeight * 0.01;
+        document.documentElement.style.setProperty("--vh", `${vh}px`);
+
+        console.log(
+          "📏 Viewport:",
+          viewportHeight,
+          "Keyboard:",
+          keyboardHeight
+        );
+      } else {
+        // Fallback for browsers without visualViewport
+        setVH();
+      }
+    };
+
     const handleResize = () => {
-      setVH();
+      updateViewportHeight();
       // Small delay to allow keyboard to settle
       setTimeout(checkIfNearBottom, 200);
     };
 
     const handleOrientationChange = () => {
-      setVH();
+      updateViewportHeight();
       // Force scroll check after orientation change
       setTimeout(() => {
         checkIfNearBottom();
@@ -169,12 +336,10 @@ export default function ChatPage() {
       }, 500);
     };
 
-    setVH();
-    window.addEventListener("resize", handleResize);
-    window.addEventListener("orientationchange", handleOrientationChange);
-
     // Handle virtual keyboard on mobile
     const handleVisualViewportChange = () => {
+      updateViewportHeight();
+
       if (window.visualViewport) {
         // Delay to prevent scroll jank during keyboard animation
         setTimeout(() => {
@@ -185,9 +350,19 @@ export default function ChatPage() {
       }
     };
 
+    // Initial setup
+    updateViewportHeight();
+
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleOrientationChange);
+
     if (window.visualViewport) {
       window.visualViewport.addEventListener(
         "resize",
+        handleVisualViewportChange
+      );
+      window.visualViewport.addEventListener(
+        "scroll",
         handleVisualViewportChange
       );
     }
@@ -200,6 +375,10 @@ export default function ChatPage() {
           "resize",
           handleVisualViewportChange
         );
+        window.visualViewport.removeEventListener(
+          "scroll",
+          handleVisualViewportChange
+        );
       }
     };
   }, [messages.length]);
@@ -209,21 +388,38 @@ export default function ChatPage() {
     const messagesContainer = messagesContainerRef.current;
     if (!messagesContainer) return;
 
+    const hasNewMessages = messages.length > lastMessagesLengthRef.current;
+
+    if (!hasNewMessages || messages.length === 0) {
+      lastMessagesLengthRef.current = messages.length;
+      return;
+    }
+
     // Check if we should auto-scroll
-    const shouldAutoScroll =
-      messages.length > lastMessagesLengthRef.current && // New message added
-      isNearBottomRef.current && // User is near bottom
-      messages.length > 0; // Has messages
+    const shouldAutoScroll = isNearBottomRef.current;
 
     if (shouldAutoScroll) {
-      // Debounce scroll to prevent excessive scrolling
+      // Clear any pending scroll
       if (scrollTimeoutRef.current) {
         clearTimeout(scrollTimeoutRef.current);
       }
 
+      // Wait for DOM to update, then scroll
       scrollTimeoutRef.current = setTimeout(() => {
-        scrollToBottom(false); // Smooth scroll for new messages
-      }, 100);
+        scrollToBottom(true); // Smooth scroll for new messages
+        setUnreadCount(0); // Reset unread count when scrolling to bottom
+
+        // Double-check scroll position after animation
+        setTimeout(() => {
+          if (messagesContainer && isNearBottomRef.current) {
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+          }
+        }, 350); // After smooth scroll animation completes
+      }, 50);
+    } else {
+      // User is scrolled up - increment unread count
+      const newMessageCount = messages.length - lastMessagesLengthRef.current;
+      setUnreadCount((prev) => prev + newMessageCount);
     }
 
     lastMessagesLengthRef.current = messages.length;
@@ -295,11 +491,50 @@ export default function ChatPage() {
     };
   }, [connectedUser, leaveRoom, router]);
 
+  // Handle Android back button to close keyboard first
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      // Check if keyboard is open (input is focused)
+      const isKeyboardOpen = document.activeElement === messageInputRef.current;
+
+      if (isKeyboardOpen && messageInputRef.current) {
+        // Prevent navigation and close keyboard instead
+        event.preventDefault();
+        messageInputRef.current.blur();
+
+        // Push a new state to keep user on the page
+        window.history.pushState(null, "", window.location.href);
+      }
+    };
+
+    // Push initial state for back button handling
+    window.history.pushState(null, "", window.location.href);
+
+    // Listen for back button
+    window.addEventListener("popstate", handlePopState);
+
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, []);
+
   const scrollToBottom = (smooth: boolean = true): void => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({
-        behavior: smooth ? "smooth" : "auto",
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    // Use multiple methods to ensure reliable scrolling
+    if (smooth) {
+      // Smooth scroll using scrollIntoView
+      messagesEndRef.current?.scrollIntoView({
+        behavior: "smooth",
         block: "end",
+      });
+    } else {
+      // Instant scroll - more reliable
+      requestAnimationFrame(() => {
+        if (container) {
+          container.scrollTop = container.scrollHeight;
+        }
       });
     }
   };
@@ -309,17 +544,37 @@ export default function ChatPage() {
     const container = messagesContainerRef.current;
     if (!container) return;
 
-    const threshold = 100; // pixels from bottom
-    const isNearBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight <
-      threshold;
+    const autoScrollThreshold = 150; // pixels from bottom for auto-scroll
+    const buttonThreshold = 50; // pixels from bottom to show button (more sensitive)
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+
+    const isNearBottom = distanceFromBottom < autoScrollThreshold;
+    const shouldShowButton = distanceFromBottom > buttonThreshold;
 
     isNearBottomRef.current = isNearBottom;
+
+    // Show/hide scroll button - appears as soon as user scrolls up even slightly
+    setShowScrollButton(shouldShowButton && messages.length > 0);
+
+    // Reset unread count when user scrolls to bottom
+    if (distanceFromBottom < buttonThreshold) {
+      setUnreadCount(0);
+    }
   };
 
   // Handle scroll events to track user position
   const handleScroll = (): void => {
     checkIfNearBottom();
+  };
+
+  // Scroll to bottom button handler
+  const handleScrollToBottom = (): void => {
+    isNearBottomRef.current = true;
+    scrollToBottom(true);
+    setUnreadCount(0);
+    setShowScrollButton(false);
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -330,13 +585,42 @@ export default function ChatPage() {
     setMessageInput("");
     stopTyping();
 
-    // Clear typing mode and unlock scroll
     setIsTypingMode(false);
     setScrollLocked(false);
-
-    // Always scroll to bottom when user sends a message
     isNearBottomRef.current = true;
-    setTimeout(() => scrollToBottom(true), 50);
+
+    // Aggressive scroll-to-bottom sequence for mobile
+    const container = messagesContainerRef.current;
+    if (container) {
+      // Immediate scroll attempts
+      const scrollToMax = () => {
+        container.scrollTop = container.scrollHeight;
+      };
+
+      // Multiple scroll attempts with increasing delays
+      scrollToMax();
+      requestAnimationFrame(scrollToMax);
+
+      const scrollDelays = [0, 50, 100, 200, 350, 500, 700];
+      scrollDelays.forEach((delay) => {
+        setTimeout(scrollToMax, delay);
+      });
+
+      // Final smooth scroll for UX
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({
+          behavior: "smooth",
+          block: "end",
+        });
+      }, 100);
+    }
+
+    // Keep keyboard open on mobile
+    if (window.innerWidth <= 768 && messageInputRef.current) {
+      setTimeout(() => {
+        messageInputRef.current?.focus();
+      }, 10);
+    }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -612,7 +896,8 @@ export default function ChatPage() {
 
   const renderMessage = (message: any, index: number) => {
     const currentUser = guestUser;
-    // Handle system messages differently (centered)
+
+    // Handle system messages
     if (
       message.senderId === "system" ||
       message.type === "system" ||
@@ -637,6 +922,8 @@ export default function ChatPage() {
     const isOwn = message.senderId === currentUser?.id;
     const showAvatar =
       index === 0 || messages[index - 1]?.senderId !== message.senderId;
+    const isNewSender =
+      index > 0 && messages[index - 1]?.senderId !== message.senderId;
 
     return (
       <motion.div
@@ -646,7 +933,7 @@ export default function ChatPage() {
         transition={{ duration: 0.3 }}
         className={`message-item flex gap-2 sm:gap-3 ${
           isOwn ? "flex-row-reverse" : "flex-row"
-        } ${showAvatar ? "mt-4" : "mt-1"}`}
+        } ${showAvatar ? "mt-3" : "mt-0.5"} ${isNewSender ? "new-sender" : ""}`}
       >
         {showAvatar && !isOwn && (
           <Avatar className="h-7 w-7 sm:h-8 sm:w-8 flex-shrink-0">
@@ -658,147 +945,173 @@ export default function ChatPage() {
         {!showAvatar && !isOwn && <div className="w-7 sm:w-8 flex-shrink-0" />}
 
         <div
-          className={`max-w-[calc(100vw-60px)] xs:max-w-[250px] sm:max-w-xs lg:max-w-md ${
+          className={`flex flex-col ${
             isOwn ? "items-end" : "items-start"
-          } flex flex-col min-w-0`}
+          } min-w-0 flex-1`}
         >
           {showAvatar && (
             <div
-              className={`text-xs text-gray-500 mb-1 px-1 truncate ${
+              className={`text-xs text-gray-500 mb-1 px-1 ${
                 isOwn ? "text-right" : "text-left"
               }`}
             >
-              <span className="truncate block">{message.senderUsername}</span>
-              <span className="text-xs opacity-75">
-                {formatTime(message.timestamp)}
-              </span>
+              <span className="font-medium">{message.senderUsername}</span>
             </div>
           )}
 
           <div
-            className={`rounded-2xl px-3 py-2 sm:px-4 text-sm sm:text-base break-words ${
+            className={`message-bubble rounded-2xl px-3 py-2 sm:px-4 sm:py-2 text-sm sm:text-base ${
               isOwn
                 ? "bg-blue-600 text-white rounded-br-md"
                 : "bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-md"
+            } ${
+              message.type === "file" || message.type === "voice"
+                ? "file-message"
+                : ""
             }`}
           >
             {message.type === "text" && (
-              <p className="break-words whitespace-pre-wrap">
-                {message.content}
-              </p>
-            )}
-
-            {message.type === "file" &&
-              (() => {
-                console.log("File message content:", message.content);
-                return true; // Always render file messages for debugging
-              })() &&
-              (message.content.tempUrl && message.content.downloadUrl ? (
-                <div className="file-preview-container">
-                  <FilePreview
-                    filename={message.content.filename || "Unknown file"}
-                    tempUrl={message.content.tempUrl}
-                    downloadUrl={message.content.downloadUrl}
-                    fileType={message.content.fileType}
-                    fileSize={message.content.fileSize}
-                    isImage={message.content.isImage}
-                    fileTypeCategory={message.content.fileTypeCategory}
-                    expiresAt={message.content.expiresAt}
-                    className="max-w-full"
-                  />
-                </div>
-              ) : (
-                <div className="p-3 bg-red-100 border border-red-300 rounded">
-                  <p className="text-red-700 text-sm">File message (Debug)</p>
-                  <p className="text-xs text-red-600">
-                    Filename: {message.content.filename || "Unknown"}
-                  </p>
-                  <p className="text-xs text-red-600">
-                    TempURL: {message.content.tempUrl ? "Present" : "Missing"}
-                  </p>
-                  <p className="text-xs text-red-600">
-                    DownloadURL:{" "}
-                    {message.content.downloadUrl ? "Present" : "Missing"}
-                  </p>
-                  <pre className="text-xs text-red-600 mt-1">
-                    {JSON.stringify(message.content, null, 2)}
-                  </pre>
-                </div>
-              ))}
-
-            {message.type === "voice" && (
-              <div className="space-y-2">
-                {/* Audio player if temp URL is available */}
-                {message.content.tempUrl && (
-                  <audio
-                    controls
-                    className="max-w-full"
-                    onError={(e) => {
-                      // Hide audio player if it fails to load (expired)
-                      e.currentTarget.style.display = "none";
-                    }}
-                  >
-                    <source
-                      src={message.content.tempUrl}
-                      type={message.content.fileType || "audio/mpeg"}
-                    />
-                    Your browser does not support the audio element.
-                  </audio>
-                )}
-
-                {/* Voice message info */}
-                <div className="flex items-center gap-2">
-                  <Mic className="w-4 h-4" />
-                  <div className="flex-1">
-                    <p className="text-sm">Voice message</p>
-                    <p className="text-xs opacity-75">
-                      {message.content.duration
-                        ? `${message.content.duration}s`
-                        : "Duration unknown"}
-                      {message.content.expiresAt && (
-                        <span className="ml-2">
-                          • Expires{" "}
-                          {new Date(
-                            message.content.expiresAt
-                          ).toLocaleTimeString()}
-                        </span>
+              <div className="message-content-wrapper">
+                <p className="message-text break-words whitespace-pre-wrap">
+                  {message.content}
+                </p>
+                <div className="message-status-time flex justify-between items-center gap-1 ">
+                  <span className="text-[10px] sm:text-xs opacity-70">
+                    {formatTime(message.timestamp)}
+                  </span>
+                  {message.status && isOwn && (
+                    <span className="flex-shrink-0">
+                      {message.status === "sending" && (
+                        <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-70" />
                       )}
-                    </p>
-                  </div>
-
-                  {/* Download button for voice */}
-                  {message.content.downloadUrl && (
-                    <a
-                      href={message.content.downloadUrl}
-                      download={message.content.filename}
-                      className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600"
-                      onClick={(e) => {
-                        // Check if link is still valid
-                        fetch(message.content.downloadUrl, {
-                          method: "HEAD",
-                        }).catch(() => {
-                          e.preventDefault();
-                          alert(
-                            "Voice message has expired or is no longer available"
-                          );
-                        });
-                      }}
-                    >
-                      Download
-                    </a>
+                      {message.status === "sent" && (
+                        <CheckCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-70" />
+                      )}
+                      {message.status === "delivered" && (
+                        <CheckCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-90" />
+                      )}
+                      {message.status === "read" && (
+                        <CheckCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-300" />
+                      )}
+                    </span>
                   )}
                 </div>
               </div>
             )}
-          </div>
 
-          {message.status && isOwn && (
-            <div className="text-xs text-gray-500 mt-1">
-              {message.status === "sending" && "Sending..."}
-              {message.status === "sent" && "Sent"}
-              {message.status === "delivered" && "Delivered"}
-            </div>
-          )}
+            {message.type === "file" && (
+              <>
+                {message.content.tempUrl && message.content.downloadUrl ? (
+                  <div className="space-y-2">
+                    <div className="file-preview-container">
+                      <FilePreview
+                        filename={message.content.filename || "Unknown file"}
+                        tempUrl={message.content.tempUrl}
+                        downloadUrl={message.content.downloadUrl}
+                        fileType={message.content.fileType}
+                        fileSize={message.content.fileSize}
+                        isImage={message.content.isImage}
+                        fileTypeCategory={message.content.fileTypeCategory}
+                        expiresAt={message.content.expiresAt}
+                        className="max-w-full"
+                      />
+                    </div>
+                    <div className="flex justify-between items-center ">
+                      <span className="text-[10px] sm:text-xs opacity-70">
+                        {formatTime(message.timestamp)}
+                      </span>
+                      {message.status && isOwn && (
+                        <>
+                          {message.status === "sending" && (
+                            <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-70" />
+                          )}
+                          {message.status === "sent" && (
+                            <CheckCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-70" />
+                          )}
+                          {message.status === "delivered" && (
+                            <CheckCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-90" />
+                          )}
+                          {message.status === "read" && (
+                            <CheckCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-300" />
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-red-100 border border-red-300 rounded">
+                    <p className="text-red-700 text-sm">File unavailable</p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {message.type === "voice" && (
+              <>
+                <div className="space-y-2">
+                  {message.content.tempUrl && (
+                    <audio
+                      controls
+                      className="max-w-full"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                    >
+                      <source
+                        src={message.content.tempUrl}
+                        type={message.content.fileType || "audio/mpeg"}
+                      />
+                    </audio>
+                  )}
+
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <Mic className="w-4 h-4 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs opacity-75 truncate">
+                          {message.content.duration
+                            ? `${message.content.duration}s`
+                            : "Voice message"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {message.content.downloadUrl && (
+                      <a
+                        href={message.content.downloadUrl}
+                        download={message.content.filename}
+                        className="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 flex-shrink-0"
+                      >
+                        ↓
+                      </a>
+                    )}
+                  </div>
+
+                  <div className="flex justify-between items-center ">
+                    <span className="text-[10px] sm:text-xs opacity-70">
+                      {formatTime(message.timestamp)}
+                    </span>
+                    {message.status && isOwn && (
+                      <>
+                        {message.status === "sending" && (
+                          <Clock className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-70" />
+                        )}
+                        {message.status === "sent" && (
+                          <CheckCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-70" />
+                        )}
+                        {message.status === "delivered" && (
+                          <CheckCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 opacity-90" />
+                        )}
+                        {message.status === "read" && (
+                          <CheckCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-blue-300" />
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </motion.div>
     );
@@ -825,6 +1138,16 @@ export default function ChatPage() {
   return (
     <>
       <div className="chat-container mobile-screen bg-white dark:bg-gray-900">
+        {/* Connection Status Banner */}
+        {!isConnected && guestUser && (
+          <div className="bg-red-100 dark:bg-red-900 border-b border-red-200 dark:border-red-800 px-4 py-2">
+            <div className="flex items-center justify-center gap-2 text-red-800 dark:text-red-200">
+              <div className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              <span className="text-sm">Connection lost - Reconnecting...</span>
+            </div>
+          </div>
+        )}
+
         {/* Session Regeneration Banner */}
         {isRegenerating && (
           <div className="bg-yellow-100 dark:bg-yellow-900 border-b border-yellow-200 dark:border-yellow-800 px-4 py-2">
@@ -897,7 +1220,8 @@ export default function ChatPage() {
                     size="sm"
                     onClick={handleAudioCall}
                     disabled={isCallActive}
-                    className="h-8 w-8 sm:h-9 sm:w-9 p-0 hidden sm:inline-flex"
+                    className="h-8 w-8 sm:h-9 sm:w-9 p-0"
+                    title="Audio Call"
                   >
                     <Phone className="w-4 h-4" />
                   </Button>
@@ -906,7 +1230,8 @@ export default function ChatPage() {
                     size="sm"
                     onClick={handleVideoCall}
                     disabled={isCallActive}
-                    className="h-8 w-8 sm:h-9 sm:w-9 p-0 hidden sm:inline-flex"
+                    className="h-8 w-8 sm:h-9 sm:w-9 p-0"
+                    title="Video Call"
                   >
                     <Video className="w-4 h-4" />
                   </Button>
@@ -945,32 +1270,14 @@ export default function ChatPage() {
                     </DropdownMenuItem>
                   )}
                   {connectedUser && (
-                    <>
-                      <DropdownMenuItem onClick={clearChat}>
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Clear Chat
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={handleExitChat}
-                        className="text-red-600 dark:text-red-400"
-                      >
-                        <X className="mr-2 h-4 w-4" />
-                        Exit Chat (ESC)
-                      </DropdownMenuItem>
-                    </>
+                    <DropdownMenuItem
+                      onClick={handleExitChat}
+                      className="text-red-600 dark:text-red-400"
+                    >
+                      <X className="mr-2 h-4 w-4" />
+                      Exit Chat (ESC)
+                    </DropdownMenuItem>
                   )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => router.push("/match")}>
-                    Find New Match
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      clearGuestSession();
-                      router.push("/");
-                    }}
-                  >
-                    Change Username
-                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
@@ -1010,14 +1317,12 @@ export default function ChatPage() {
               </Button>
             </motion.div>
           )}
-
           {messages.map((message, index) => renderMessage(message, index))}
-
           {isTyping && (
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
-              className="flex gap-3"
+              className="flex gap-3 mb-6 pb-3" // Balanced spacing
             >
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-gray-600 text-white text-xs">
@@ -1039,8 +1344,36 @@ export default function ChatPage() {
               </div>
             </motion.div>
           )}
-
-          <div ref={messagesEndRef} />
+          {/* <div ref={messagesEndRef} className="h-12 sm:h-14" />{" "} */}
+          {/* 56px on mobile, 48px on desktop */} {/* Taller on mobile */}
+          {/* Scroll to Bottom Button - WhatsApp Style */}
+          {showScrollButton && connectedUser && (
+            <motion.button
+              initial={{ opacity: 0, scale: 0.8, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.8, y: 20 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              onClick={handleScrollToBottom}
+              className="fixed bottom-24 sm:bottom-28 right-4 sm:right-6 z-50 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 active:scale-95 rounded-full shadow-lg p-3 transition-all duration-150 border border-gray-200 dark:border-gray-700"
+              style={{
+                boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+              }}
+              aria-label="Scroll to bottom"
+            >
+              <div className="relative">
+                <ChevronDown className="w-6 h-6 text-gray-700 dark:text-gray-200" />
+                {unreadCount > 0 && (
+                  <motion.span
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="absolute -top-2 -right-2 bg-blue-600 text-white text-xs font-bold rounded-full min-w-[20px] h-5 px-1 flex items-center justify-center shadow-md"
+                  >
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </motion.span>
+                )}
+              </div>
+            </motion.button>
+          )}
         </div>
 
         {/* Keyboard Shortcut Hint - only show when connected */}
@@ -1102,6 +1435,7 @@ export default function ChatPage() {
 
               <div className="flex-1 relative min-w-0">
                 <Input
+                  ref={messageInputRef}
                   value={messageInput}
                   onChange={handleInputChange}
                   onFocus={handleInputFocus}
@@ -1147,8 +1481,8 @@ export default function ChatPage() {
         )}
 
         {/* Matching Dialog */}
-        <Dialog 
-          open={showMatchDialog} 
+        <Dialog
+          open={showMatchDialog}
           onOpenChange={(open) => {
             setShowMatchDialog(open);
             // Redirect to home when dialog closes

@@ -5,10 +5,12 @@ import {
   useContext,
   useState,
   useEffect,
+  useRef,
   type ReactNode,
 } from "react";
 import socketService from "@/lib/socket";
 import { useGuestSession } from "./GuestSessionContext";
+import { usePageVisibility } from "@/hooks/usePageVisibility";
 
 interface ConnectedUser {
   id: string;
@@ -78,7 +80,10 @@ export const useChat = () => {
 
 export const ChatProvider = ({ children }: { children: ReactNode }) => {
   const { guestUser, isGuestSession } = useGuestSession();
+  const { isVisible, wasHiddenDuration } = usePageVisibility();
   const [isConnected, setIsConnected] = useState(false);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const lastReconnectAttemptRef = useRef<number>(0);
 
   // Persist connectedUser in sessionStorage to survive hot reloads
   const [connectedUser, setConnectedUser] = useState<ConnectedUser | null>(
@@ -142,6 +147,101 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
 
     return unsubscribe;
   }, []);
+  
+  // Handle reconnection after wake from sleep or tab becoming visible
+  useEffect(() => {
+    if (!isVisible || !isGuestSession || !guestUser) return;
+    
+    // If page was hidden for more than 10 seconds, might have missed disconnect events
+    if (wasHiddenDuration > 10000) {
+      console.log(`🔄 Page visible after ${Math.round(wasHiddenDuration / 1000)}s - reconnecting...`);
+      
+      // If user was in a chat, clear it since the other user likely disconnected
+      if (connectedUser) {
+        console.log('🧹 Clearing stale chat session after disconnect period');
+        setConnectedUser(null);
+        clearChatHistory();
+        sessionStorage.removeItem('chat_connected_user');
+        
+        // Mark that we need to redirect
+        sessionStorage.setItem('was_disconnected', 'true');
+      }
+      
+      // Throttle reconnection attempts
+      const now = Date.now();
+      if (now - lastReconnectAttemptRef.current < 5000) {
+        console.log('⏳ Skipping reconnect - too soon after last attempt');
+        return;
+      }
+      lastReconnectAttemptRef.current = now;
+      
+      // Clear any pending reconnection
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      
+      // Check if we're actually disconnected
+      if (!socketService.getConnectionStatus()) {
+        console.log('🔄 Attempting to reconnect socket...');
+        
+        // Disconnect and reconnect cleanly
+        socketService.disconnect();
+        
+        // Small delay to ensure clean disconnect
+        reconnectTimeoutRef.current = setTimeout(() => {
+          connectSocket();
+        }, 500);
+      } else {
+        console.log('✅ Socket already connected');
+      }
+    }
+  }, [isVisible, wasHiddenDuration, isGuestSession, guestUser, connectedUser]);
+  
+  // Handle network connectivity changes
+  useEffect(() => {
+    if (!isGuestSession || !guestUser) return;
+    
+    const handleOnline = () => {
+      console.log('🌐 Network is back online');
+      
+      // Check if socket is disconnected
+      if (!socketService.getConnectionStatus()) {
+        console.log('🔄 Reconnecting after network restoration...');
+        
+        // Throttle reconnection
+        const now = Date.now();
+        if (now - lastReconnectAttemptRef.current < 3000) {
+          return;
+        }
+        lastReconnectAttemptRef.current = now;
+        
+        // Attempt to reconnect
+        setTimeout(() => {
+          socketService.disconnect();
+          connectSocket();
+        }, 1000);
+      }
+    };
+    
+    const handleOffline = () => {
+      console.log('📵 Network is offline');
+      setIsConnected(false);
+    };
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    // Check current network status on mount
+    if (typeof window !== 'undefined' && !navigator.onLine) {
+      console.log('📵 Starting in offline mode');
+      setIsConnected(false);
+    }
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [isGuestSession, guestUser]);
 
   const connectSocket = (): void => {
     try {
@@ -166,6 +266,38 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const setupSocketListeners = (): void => {
+    // Remove all previous listeners to prevent duplicates
+    console.log('🧹 Cleaning up old socket listeners');
+    const events = [
+      'connection:established',
+      'user:match:searching',
+      'user:matched',
+      'user:match:no_users',
+      'user:match:error',
+      'user:match:cancelled',
+      'chat:message',
+      'chat:message:sent',
+      'chat:message:delivered',
+      'chat:cleared',
+      'user:disconnected',
+      'room:closed',
+      'room:user_joined',
+      'room:user_left',
+      'chat:typing:start',
+      'chat:typing:stop',
+      'chat:error',
+      'presence:user_online',
+      'presence:user_offline',
+      'presence:searching_started',
+      'presence:searching_stopped',
+      'stats:update',
+      'users:online:update'
+    ];
+    
+    events.forEach(event => socketService.off(event));
+    
+    console.log('✅ Old listeners removed, setting up new ones');
+    
     // Note: Connection status is now handled via the socket service callback system
 
     // Custom connection established event (if backend sends it)
@@ -295,7 +427,7 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
 
     // Handle room closing events
     socketService.on("room:closed", (data) => {
-      console.log("Room closed:", data);
+      console.log("🚪 Room closed:", data);
 
       // Add system message about room closure
       const systemMessage: Message = {
@@ -309,13 +441,16 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       };
       addMessage(systemMessage);
 
-      // Immediately close the room and redirect to dashboard
+      // Clear chat state immediately
+      setConnectedUser(null);
+      clearChatHistory();
+      sessionStorage.removeItem('chat_connected_user');
+      sessionStorage.removeItem('was_disconnected');
+      
+      // Redirect to home after brief delay to show message
       setTimeout(() => {
-        setConnectedUser(null);
-        clearChatHistory();
-        // Redirect to dashboard/home page
         window.location.href = "/";
-      }, 2000); // 2 second delay to show message
+      }, 1500); // 1.5 second delay to show message
     });
 
     // Room events

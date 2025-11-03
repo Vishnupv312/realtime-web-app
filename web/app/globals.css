@@ -1,5 +1,5 @@
-@import 'tailwindcss';
-@import 'tw-animate-css';
+@import "tailwindcss";
+@import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -140,12 +140,14 @@ video {
 }
 
 /* Mobile viewport fix */
-html, body {
+html,
+body {
   height: 100%;
 }
 
 /* Only disable overflow on chat pages, not main pages */
-html.chat-view, body.chat-view {
+html.chat-view,
+body.chat-view {
   overflow: hidden;
 }
 
@@ -182,8 +184,18 @@ html.chat-view, body.chat-view {
   body.chat-view {
     position: fixed;
     width: 100%;
-    height: 100%;
+    height: 100vh;
+    height: var(--viewport-height, 100vh);
     overflow: hidden;
+    overscroll-behavior: none;
+  }
+
+  html.chat-view {
+    position: fixed;
+    width: 100%;
+    height: 100vh;
+    overflow: hidden;
+    overscroll-behavior: none;
   }
 }
 
@@ -210,6 +222,10 @@ html.chat-view, body.chat-view {
   overscroll-behavior: none;
   /* Maintain scroll position during input focus */
   contain: strict;
+  /* Default padding for desktop to prevent message cutoff */
+  padding-bottom: 90px;
+  /* Ensure scrollIntoView respects padding */
+  scroll-padding-bottom: 20px;
 }
 
 .chat-messages::-webkit-scrollbar {
@@ -238,13 +254,13 @@ html.chat-view, body.chat-view {
     scroll-margin: 0;
     scroll-padding: 0;
   }
-  
+
   /* Prevent viewport jumping on input focus */
   .chat-input input:focus {
     outline: none;
     scroll-margin: 0;
   }
-  
+
   /* Stable input container */
   .chat-input-container {
     position: sticky;
@@ -272,7 +288,7 @@ html.chat-view, body.chat-view {
 /* Better message spacing */
 .message-list {
   padding: 1rem;
-  padding-bottom: 0;
+  padding-bottom: 1.5rem; /* Default padding for desktop */
 }
 
 .message-item {
@@ -281,6 +297,8 @@ html.chat-view, body.chat-view {
 
 .message-item:last-child {
   margin-bottom: 1rem;
+  /* Ensure last message is always visible above input */
+  scroll-margin-bottom: 50px;
 }
 
 /* Prevent scroll during typing on mobile */
@@ -289,12 +307,12 @@ html.chat-view, body.chat-view {
     overflow: hidden;
     position: fixed;
   }
-  
+
   /* Smooth scroll only for new messages */
   .chat-messages.smooth-scroll {
     scroll-behavior: smooth;
   }
-  
+
   /* Lock scroll position during input events */
   .chat-messages.scroll-locked {
     overflow: hidden;
@@ -316,21 +334,47 @@ html.chat-view, body.chat-view {
 
 /* Enhanced mobile optimizations for WhatsApp/Telegram-like experience */
 @media (max-width: 768px) {
-  /* Prevent viewport jumping during keyboard events */
-  .mobile-screen.keyboard-visible {
-    transform: translateZ(0);
-    backface-visibility: hidden;
+  /* Fixed layout container - prevents entire page from scrolling */
+  .chat-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    /* Use dynamic viewport height that accounts for keyboard */
+    height: var(--viewport-height, 100vh);
+    max-height: var(--viewport-height, 100vh);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
-  
-  /* Smooth message area transitions */
+
+  /* Fixed header */
+  .chat-container > header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    flex-shrink: 0;
+  }
+
+  /* Scrollable messages area with proper spacing */
   .chat-messages {
-    transition: none;
-    will-change: scroll-position;
-    /* Prevent scroll during input focus/blur */
-    scroll-behavior: auto;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    /* Add padding for fixed input - extra space to prevent cutoff */
+    padding-bottom: 140px !important;
   }
-  
-  /* Stable input area positioning */
+
+  /* Extra bottom padding for message list on mobile */
+  .message-list {
+    padding-bottom: 40px !important;
+  }
+
+  /* Fixed input area at bottom - always visible above keyboard */
   .chat-input-container {
     position: fixed;
     bottom: 0;
@@ -339,21 +383,24 @@ html.chat-view, body.chat-view {
     background: white;
     border-top: 1px solid #e5e7eb;
     z-index: 1000;
-    transform: translateZ(0);
-    backface-visibility: hidden;
-    /* Prevent layout shift */
-    contain: layout style;
-    padding: 12px 12px 12px 12px !important;
+    padding: 12px !important;
     width: 100%;
     box-sizing: border-box;
+    /* Prevent keyboard from pushing it off screen */
+    transform: translateZ(0);
   }
-  
+
+  /* Hide keyboard shortcut hint on mobile */
+  .chat-container > div:has(.text-xs.text-gray-400) {
+    display: none;
+  }
+
   /* Dark mode input container */
   .dark .chat-input-container {
     background: rgb(17, 24, 39);
     border-top-color: rgb(55, 65, 81);
   }
-  
+
   /* Input field optimizations */
   .chat-input {
     /* Prevent iOS zoom */
@@ -364,7 +411,7 @@ html.chat-view, body.chat-view {
     position: relative;
     z-index: 1;
   }
-  
+
   /* Prevent scroll interference during typing */
   .typing-active .chat-messages {
     /* Temporarily lock scroll position */
@@ -372,14 +419,7 @@ html.chat-view, body.chat-view {
     /* Maintain scroll position */
     scroll-behavior: auto;
   }
-  
-  /* Message area padding adjustment for fixed input */
-  .chat-messages {
-    padding-bottom: 80px; /* Space for fixed input */
-    padding-left: 12px;
-    padding-right: 12px;
-  }
-  
+
   /* File preview stability */
   .file-preview-container img {
     max-width: 100%;
@@ -388,14 +428,14 @@ html.chat-view, body.chat-view {
     /* Prevent layout shift */
     contain: layout style;
   }
-  
+
   /* Stable avatar rendering */
   .message-item {
     contain: layout style;
     word-wrap: break-word;
     overflow-wrap: break-word;
   }
-  
+
   /* Improved visual viewport handling */
   @supports (height: 100dvh) {
     .mobile-screen {
@@ -404,7 +444,7 @@ html.chat-view, body.chat-view {
       height: calc(var(--vh, 1vh) * 100); /* Dynamic */
     }
   }
-  
+
   /* Better keyboard handling */
   .chat-input input:focus {
     /* Prevent viewport shift on focus */
@@ -414,12 +454,12 @@ html.chat-view, body.chat-view {
     width: 100%;
     box-sizing: border-box;
   }
-  
+
   /* Smooth transitions only when appropriate */
   .chat-messages:not(.scroll-locked):not(.typing-mode) {
     scroll-behavior: smooth;
   }
-  
+
   /* Optimize message rendering */
   .message-item {
     transform: translateZ(0);
@@ -437,13 +477,13 @@ html.chat-view, body.chat-view {
       height: calc(var(--vh, 1vh) * 100);
       min-height: calc(var(--vh, 1vh) * 100);
     }
-    
+
     /* Prevent iOS rubber band scrolling */
     .chat-messages {
       overscroll-behavior-y: none;
       -webkit-overflow-scrolling: touch;
     }
-    
+
     /* Stable input on iOS keyboard */
     .chat-input-container {
       position: fixed;
@@ -451,7 +491,7 @@ html.chat-view, body.chat-view {
       /* iOS keyboard safe area */
       padding-bottom: env(keyboard-inset-height, 0);
     }
-    
+
     /* Prevent iOS zoom on input focus */
     .chat-input input {
       font-size: 16px !important;
@@ -469,11 +509,10 @@ html.chat-view, body.chat-view {
     height: 100vh;
     height: calc(var(--vh, 1vh) * 100);
   }
-  
-  /* Better Android keyboard handling */
+
+  /* Keep fixed positioning on Android */
   .chat-input-container {
-    /* Ensure visibility above keyboard */
-    position: sticky;
+    position: fixed;
     bottom: 0;
     z-index: 999;
   }
@@ -498,14 +537,223 @@ html.chat-view, body.chat-view {
     transform: translateZ(0);
     backface-visibility: hidden;
   }
-  
+
   /* Optimize animation performance */
   .message-item {
     will-change: transform;
   }
-  
+
   /* Reduce repaints during scroll */
   .chat-messages {
     contain: strict;
+  }
+}
+
+/* Scroll to bottom button styling */
+.chat-messages button[aria-label="Scroll to bottom"] {
+  /* Ensure button is always visible and clickable */
+  pointer-events: auto;
+  touch-action: manipulation;
+}
+
+/* Mobile-specific scroll button positioning */
+@media (max-width: 768px) {
+  .chat-messages button[aria-label="Scroll to bottom"] {
+    bottom: 6rem !important; /* Above mobile input bar */
+  }
+}
+
+/* ADJUSTED FIX: Balanced spacing for messages above input */
+
+/* Ensure both sender and receiver messages have consistent bottom spacing */
+@media (max-width: 768px) {
+  /* All messages get base spacing */
+  .message-item {
+    margin-bottom: 0.75rem !important;
+  }
+
+  /* Last message (whether sent or received) gets extra space */
+  .message-item:last-of-type {
+    margin-bottom: 45px !important;
+  }
+
+  /* Typing indicator - treat like last message */
+  .chat-messages > motion.div:last-child {
+    margin-bottom: 45px !important;
+  }
+}
+/* OPTIMIZED FIX: Perfect spacing for messages above input */
+@media (max-width: 768px) {
+  /* Optimal padding for messages */
+  .chat-messages.message-list {
+    padding-bottom: 70px !important; /* Increased from 120px */
+  }
+
+  /* Typing indicator spacing */
+  .chat-messages > div:has(.animate-bounce) {
+    margin-bottom: 40px !important; /* Increased from 30px */
+    padding-bottom: 15px !important; /* Increased from 10px */
+  }
+
+  /* Last message spacing - key for visibility */
+  .message-item:last-of-type {
+    margin-bottom: 45px !important; /* Increased from 30px */
+  }
+
+  /* Messages end ref spacing */
+  .chat-messages > div[class*="h-"] {
+    height: 50px !important; /* Increased from 40px */
+    min-height: 50px !important;
+  }
+
+  /* Ensure proper spacing for both sent and received messages */
+  .message-item {
+    margin-bottom: 0.75rem;
+  }
+}
+
+/* Extra small mobile devices */
+@media (max-width: 375px) {
+  .chat-messages.message-list {
+    padding-bottom: 170px !important;
+  }
+
+  .message-item:last-of-type {
+    margin-bottom: 50px !important;
+  }
+}
+
+/* When keyboard is visible */
+@media (max-width: 768px) {
+  html.keyboard-visible .chat-messages,
+  body.keyboard-visible .chat-messages {
+    padding-bottom: 160px !important;
+  }
+
+  html.keyboard-visible .message-item:last-of-type,
+  body.keyboard-visible .message-item:last-of-type {
+    margin-bottom: 50px !important;
+  }
+}
+
+/* Ensure input container doesn't overlap messages */
+@media (max-width: 768px) {
+  .chat-input-container {
+    /* Add shadow to show it's above content */
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+    /* Ensure it's truly fixed */
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 1000 !important;
+  }
+}
+
+//spacing
+
+/* WhatsApp-style message bubbles with proper text wrapping */
+.message-bubble {
+  max-width: 85%; /* WhatsApp uses ~85% of screen width */
+  word-wrap: break-word;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+  white-space: pre-wrap; /* Preserve line breaks but wrap text */
+  line-height: 1.4; /* WhatsApp line height */
+}
+
+/* Mobile-specific message widths */
+@media (max-width: 768px) {
+  .message-bubble {
+    max-width: 80%; /* Slightly narrower on mobile */
+  }
+
+  /* Ensure messages don't exceed viewport */
+  .message-item {
+    max-width: 100%;
+    overflow: hidden;
+  }
+}
+
+/* Very small screens */
+@media (max-width: 375px) {
+  .message-bubble {
+    max-width: 75%; /* Even narrower on small phones */
+  }
+}
+
+/* Text content inside message bubbles */
+.message-bubble p {
+  margin: 0;
+  padding: 0;
+  word-wrap: break-word;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  white-space: pre-wrap;
+}
+
+/* Handle long words and URLs */
+.message-bubble {
+  overflow-wrap: anywhere; /* Break even in middle of words if necessary */
+  -webkit-hyphens: auto;
+  -moz-hyphens: auto;
+  -ms-hyphens: auto;
+}
+
+/* Message spacing - WhatsApp style */
+@media (max-width: 768px) {
+  /* Consistent spacing between messages */
+  .message-item {
+    margin-bottom: 0.5rem; /* 8px - WhatsApp spacing */
+  }
+
+  /* Messages from same sender - reduced spacing */
+  .message-item:not(:first-child):has(+ .message-item) {
+    margin-bottom: 0.125rem; /* 2px - tight spacing for consecutive messages */
+  }
+
+  /* Different sender - more spacing */
+  .message-item.new-sender {
+    margin-top: 0.75rem; /* 12px - clear separation */
+  }
+}
+
+/* Time and status positioning - WhatsApp style */
+.message-status-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: 0.5rem;
+  font-size: 0.75rem;
+  opacity: 0.7;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Ensure status icons don't wrap */
+.message-content-wrapper {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.5rem;
+  min-width: 0; /* Allow flex items to shrink */
+}
+
+/* Text content that can wrap */
+.message-text {
+  flex: 1;
+  min-width: 0; /* Allow text to wrap */
+}
+
+/* File and media messages */
+.message-bubble.file-message,
+.message-bubble.media-message {
+  max-width: 300px; /* Fixed width for media */
+}
+
+@media (max-width: 768px) {
+  .message-bubble.file-message,
+  .message-bubble.media-message {
+    max-width: min(300px, 80vw); /* Responsive media width */
   }
 }

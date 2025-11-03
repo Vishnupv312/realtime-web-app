@@ -1,50 +1,60 @@
-import { io, type Socket } from "socket.io-client"
-import Cookies from "js-cookie"
-import { guestAPI } from "./api"
+import { io, type Socket } from "socket.io-client";
+import Cookies from "js-cookie";
+import { guestAPI } from "./api";
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001"
-console.log('🔧 Socket URL:', SOCKET_URL)
-console.log('🔧 Environment SOCKET_URL:', process.env.NEXT_PUBLIC_SOCKET_URL)
+const SOCKET_URL =
+  process.env.NEXT_PUBLIC_SOCKET_URL || "http://localhost:3001";
+console.log("🔧 Socket URL:", SOCKET_URL);
+console.log("🔧 Environment SOCKET_URL:", process.env.NEXT_PUBLIC_SOCKET_URL);
 
 interface GuestUser {
-  id: string
-  username: string
-  deviceId: string
-  isGuest: boolean
+  id: string;
+  username: string;
+  deviceId: string;
+  isGuest: boolean;
 }
 
 class SocketService {
-  private socket: Socket | null = null
-  public isConnected = false
-  private connectionCallbacks: ((connected: boolean) => void)[] = []
-  private currentUser: any = null
-  private webrtcListenersSetup: (() => void) | null = null
-  private isRegeneratingToken = false
+  private socket: Socket | null = null;
+  public isConnected = false;
+  private connectionCallbacks: ((connected: boolean) => void)[] = [];
+  private currentUser: any = null;
+  private webrtcListenersSetup: (() => void) | null = null;
+  private isRegeneratingToken = false;
 
   connect(guestUser?: GuestUser): Socket {
     // Try to get token from different sources
-    const regularToken = Cookies.get("authToken") || localStorage.getItem("authToken")
-    const guestToken = sessionStorage.getItem("guestAuthToken")
-    
+    const regularToken =
+      Cookies.get("authToken") || localStorage.getItem("authToken");
+    const guestToken = sessionStorage.getItem("guestAuthToken");
+
     // Prioritize regular auth token, fallback to guest token
-    const token = regularToken || guestToken
+    const token = regularToken || guestToken;
 
     // For guest-only app, we need either a JWT token or guest user data
     if (!token) {
-      console.error("❌ No JWT authentication token found")
-      throw new Error("Authentication token required. Please create a guest session first.")
+      console.error("❌ No JWT authentication token found");
+      throw new Error(
+        "Authentication token required. Please create a guest session first."
+      );
     }
 
-    console.log("🔌 Attempting to connect to:", SOCKET_URL)
-    console.log("🔑 Using auth token:", token ? `${token.substring(0, 10)}...` : "None")
-    console.log("👤 Guest user:", guestUser ? guestUser.username : "From JWT token")
+    console.log("🔌 Attempting to connect to:", SOCKET_URL);
+    console.log(
+      "🔑 Using auth token:",
+      token ? `${token.substring(0, 10)}...` : "None"
+    );
+    console.log(
+      "👤 Guest user:",
+      guestUser ? guestUser.username : "From JWT token"
+    );
 
     // Store current user for presence management
-    this.currentUser = guestUser || null
+    this.currentUser = guestUser || null;
 
     // Disconnect existing socket if any
     if (this.socket) {
-      this.socket.disconnect()
+      this.socket.disconnect();
     }
 
     this.socket = io(SOCKET_URL, {
@@ -57,277 +67,335 @@ class SocketService {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       timeout: 20000,
-      forceNew: true
-    })
+      forceNew: true,
+    });
 
-    this.setupEventListeners()
-    return this.socket
+    this.setupEventListeners();
+    return this.socket;
   }
 
   private setupEventListeners(): void {
-    if (!this.socket) return
+    if (!this.socket) return;
 
     this.socket.on("connect", () => {
-      console.log("✅ Successfully connected to server:", SOCKET_URL)
-      console.log("🎉 Socket ID:", this.socket?.id)
-      this.isConnected = true
-      this.notifyConnectionChange(true)
-      
+      console.log("✅ Successfully connected to server:", SOCKET_URL);
+      console.log("🎉 Socket ID:", this.socket?.id);
+      this.isConnected = true;
+      this.notifyConnectionChange(true);
+
       // Re-register WebRTC listeners on new socket connection
       if (this.webrtcListenersSetup) {
         console.log("🔄 Re-registering WebRTC listeners on socket connect...");
         this.webrtcListenersSetup();
       }
-      
+
       // Emit presence update on connection
       if (this.currentUser) {
-        this.registerGuestUser(this.currentUser)
+        this.registerGuestUser(this.currentUser);
       }
-      this.updateOnlineStatus(true)
-    })
+      this.updateOnlineStatus(true);
+    });
 
     this.socket.on("disconnect", (reason) => {
-      console.log("🔌 Disconnected from server. Reason:", reason)
-      this.isConnected = false
-      this.notifyConnectionChange(false)
-      
+      console.log("🔌 Disconnected from server. Reason:", reason);
+      this.isConnected = false;
+      this.notifyConnectionChange(false);
+
       // Update presence on disconnect
-      this.updateOnlineStatus(false)
-    })
+      this.updateOnlineStatus(false);
+    });
 
     this.socket.on("connect_error", async (error) => {
-      console.error("❌ Connection error:", {
+      console.log("❌ Connection error:", {
         message: error.message,
-        description: error.description,
-        context: error.context,
-        type: error.type
-      })
-      this.isConnected = false
-      this.notifyConnectionChange(false)
-      
-      // Handle token expiration
-      if (error.message === "Token has expired" && !this.isRegeneratingToken) {
-        console.log("🔄 Detected expired token on socket connection, regenerating...")
-        await this.handleTokenExpiration()
+        description: error,
+        context: error,
+        type: error,
+      });
+      this.isConnected = false;
+      this.notifyConnectionChange(false);
+
+      // Handle token/session expiration - check for both JWT expiration and session not found
+      const isExpiredToken = error.message === "Token has expired";
+      const isExpiredSession =
+        error.message === "Guest session not found or expired" ||
+        error.message.includes("session not found") ||
+        error.message.includes("expired");
+
+      if ((isExpiredToken || isExpiredSession) && !this.isRegeneratingToken) {
+        console.log(
+          "🔄 Detected expired token/session, regenerating...",
+          error.message
+        );
+        await this.handleTokenExpiration();
       }
-    })
-    
+    });
+
     this.socket.on("reconnect", (attemptNumber) => {
-      console.log("🔄 Reconnected after", attemptNumber, "attempts")
-      this.isConnected = true
-      this.notifyConnectionChange(true)
-    })
-    
+      console.log("🔄 Reconnected after", attemptNumber, "attempts");
+      this.isConnected = true;
+      this.notifyConnectionChange(true);
+    });
+
     this.socket.on("reconnect_attempt", (attemptNumber) => {
-      console.log("🔄 Reconnection attempt #", attemptNumber)
-    })
-    
-    this.socket.on("reconnect_error", (error) => {
-      console.error("❌ Reconnection error:", error.message)
-    })
-    
+      console.log("🔄 Reconnection attempt #", attemptNumber);
+    });
+
+    this.socket.on("reconnect_error", async (error) => {
+      console.error("❌ Reconnection error:", error.message);
+
+      // Also handle expiration on reconnection errors
+      const isExpiredToken = error.message === "Token has expired";
+      const isExpiredSession =
+        error.message === "Guest session not found or expired" ||
+        error.message.includes("session not found") ||
+        error.message.includes("expired");
+
+      if ((isExpiredToken || isExpiredSession) && !this.isRegeneratingToken) {
+        console.log(
+          "🔄 Detected expired token/session on reconnect, regenerating...",
+          error.message
+        );
+        await this.handleTokenExpiration();
+      }
+    });
+
     this.socket.on("reconnect_failed", () => {
-      console.error("❌ Failed to reconnect after all attempts")
-      this.isConnected = false
-      this.notifyConnectionChange(false)
-    })
+      console.error("❌ Failed to reconnect after all attempts");
+      this.isConnected = false;
+      this.notifyConnectionChange(false);
+    });
   }
 
   private notifyConnectionChange(connected: boolean): void {
-    this.connectionCallbacks.forEach(callback => {
+    this.connectionCallbacks.forEach((callback) => {
       try {
-        callback(connected)
+        callback(connected);
       } catch (error) {
-        console.error('Error in connection callback:', error)
+        console.error("Error in connection callback:", error);
       }
-    })
+    });
   }
 
   // Connection status methods
   getConnectionStatus(): boolean {
-    return this.isConnected && this.socket?.connected === true
+    return this.isConnected && this.socket?.connected === true;
   }
 
   onConnectionChange(callback: (connected: boolean) => void): () => void {
-    this.connectionCallbacks.push(callback)
+    this.connectionCallbacks.push(callback);
     // Return unsubscribe function
     return () => {
-      const index = this.connectionCallbacks.indexOf(callback)
+      const index = this.connectionCallbacks.indexOf(callback);
       if (index > -1) {
-        this.connectionCallbacks.splice(index, 1)
+        this.connectionCallbacks.splice(index, 1);
       }
-    }
+    };
   }
 
   disconnect(): void {
     if (this.socket) {
-      this.socket.disconnect()
-      this.socket = null
-      this.isConnected = false
-      this.notifyConnectionChange(false)
+      this.socket.disconnect();
+      this.socket = null;
+      this.isConnected = false;
+      this.notifyConnectionChange(false);
     }
   }
 
   // User matching
   requestMatch(): void {
-    this.socket?.emit("user:match")
+    this.socket?.emit("user:match");
   }
 
   cancelMatch(): void {
-    this.socket?.emit("user:match:cancel")
+    this.socket?.emit("user:match:cancel");
   }
 
   // Chat methods
   sendMessage(message: any): void {
-    this.socket?.emit("chat:message", message)
+    this.socket?.emit("chat:message", message);
   }
 
   clearChat(): void {
-    this.socket?.emit("chat:clear")
+    this.socket?.emit("chat:clear");
   }
 
   // Room management
   leaveRoom(): void {
-    this.socket?.emit("leave-room")
+    this.socket?.emit("leave-room");
   }
 
   closeRoom(): void {
-    this.socket?.emit("close-room")
+    this.socket?.emit("close-room");
   }
-  
+
   // Message status confirmation
   confirmMessageDelivered(messageId: string): void {
-    this.socket?.emit("chat:message:delivered", { messageId })
+    this.socket?.emit("chat:message:delivered", { messageId });
   }
 
   // WebRTC methods
   sendOffer(offer: RTCSessionDescriptionInit, type: string): void {
-    this.socket?.emit("webrtc:offer", { offer, type })
+    this.socket?.emit("webrtc:offer", { offer, type });
   }
 
   sendAnswer(answer: RTCSessionDescriptionInit): void {
-    this.socket?.emit("webrtc:answer", { answer })
+    this.socket?.emit("webrtc:answer", { answer });
   }
 
   sendIceCandidate(candidate: RTCIceCandidate): void {
-    this.socket?.emit("webrtc:ice-candidate", { candidate })
+    this.socket?.emit("webrtc:ice-candidate", { candidate });
   }
 
   sendCallEnd(): void {
-    this.socket?.emit("webrtc:call-end")
+    this.socket?.emit("webrtc:call-end");
   }
 
   sendCallReject(): void {
-    this.socket?.emit("webrtc:call-reject")
+    this.socket?.emit("webrtc:call-reject");
   }
 
   sendCallTimeout(): void {
-    this.socket?.emit("webrtc:call-timeout")
+    this.socket?.emit("webrtc:call-timeout");
   }
 
   // Typing indicators
   startTyping(): void {
-    this.socket?.emit("chat:typing:start")
+    this.socket?.emit("chat:typing:start");
   }
 
   stopTyping(): void {
-    this.socket?.emit("chat:typing:stop")
+    this.socket?.emit("chat:typing:stop");
   }
 
   // Real-time Presence Management
   updateOnlineStatus(isOnline: boolean): void {
-    this.socket?.emit("presence:online", { isOnline, timestamp: new Date().toISOString() })
+    this.socket?.emit("presence:online", {
+      isOnline,
+      timestamp: new Date().toISOString(),
+    });
   }
 
   updateSearchingStatus(isSearching: boolean): void {
-    this.socket?.emit("presence:searching", { isSearching })
+    this.socket?.emit("presence:searching", { isSearching });
   }
 
   requestPresenceUpdate(): void {
-    this.socket?.emit("presence:request_update")
+    this.socket?.emit("presence:request_update");
   }
 
   // Get real-time stats
   requestStats(): void {
-    this.socket?.emit("stats:request")
+    this.socket?.emit("stats:request");
   }
 
   requestOnlineUsers(): void {
-    this.socket?.emit("users:online:request")
+    this.socket?.emit("users:online:request");
   }
 
   // Guest session management
   registerGuestUser(guestUser: GuestUser): void {
-    this.socket?.emit("guest:register", guestUser)
+    this.socket?.emit("guest:register", guestUser);
   }
 
   updateGuestUser(updates: Partial<GuestUser>): void {
-    this.socket?.emit("guest:update", updates)
+    this.socket?.emit("guest:update", updates);
   }
 
   // Heartbeat for presence
   sendHeartbeat(): void {
-    this.socket?.emit("presence:heartbeat", { timestamp: new Date().toISOString() })
+    this.socket?.emit("presence:heartbeat", {
+      timestamp: new Date().toISOString(),
+    });
   }
 
   // Event listeners
   on(event: string, callback: (...args: any[]) => void): void {
-    this.socket?.on(event, callback)
+    this.socket?.on(event, callback);
   }
 
   off(event: string, callback?: (...args: any[]) => void): void {
-    this.socket?.off(event, callback)
+    this.socket?.off(event, callback);
   }
-  
+
   // Register a function to set up WebRTC listeners that will be called on each connection
   setWebRTCListenersSetup(setupFn: () => void): void {
     this.webrtcListenersSetup = setupFn;
     // Also call it immediately if already connected
     if (this.isConnected && this.socket) {
-      console.log("🔄 Socket already connected, setting up WebRTC listeners immediately...");
+      console.log(
+        "🔄 Socket already connected, setting up WebRTC listeners immediately..."
+      );
       setupFn();
     }
   }
-  
+
   // Handle token expiration and regenerate session
   private async handleTokenExpiration(): Promise<void> {
     if (this.isRegeneratingToken) {
-      console.log("⏳ Token regeneration already in progress, skipping...")
-      return
+      console.log("⏳ Token regeneration already in progress, skipping...");
+      return;
     }
-    
-    this.isRegeneratingToken = true
-    
+
+    this.isRegeneratingToken = true;
+
     try {
-      console.log("🧹 Clearing expired session data...")
+      console.log(
+        "🧹 Session expired - clearing data and creating new session..."
+      );
+
+      // Notify listeners that session has expired (before clearing)
+      this.notifySessionExpired();
+
       // Clear expired token and session data
-      sessionStorage.removeItem("guestAuthToken")
-      sessionStorage.removeItem("guest_user_session")
-      
+      sessionStorage.removeItem("guestAuthToken");
+      sessionStorage.removeItem("guest_user_session");
+      sessionStorage.removeItem("chat_connected_user");
+
       // Get device ID from localStorage
-      const deviceId = localStorage.getItem("guest_deviceId")
-      
+      const deviceId = localStorage.getItem("guest_deviceId");
+
       // Generate new username
       const GUEST_ADJECTIVES = [
-        "Cool", "Happy", "Smart", "Brave", "Kind", "Quick", "Bright", "Calm", "Swift", "Bold"
-      ]
+        "Cool",
+        "Happy",
+        "Smart",
+        "Brave",
+        "Kind",
+        "Quick",
+        "Bright",
+        "Calm",
+        "Swift",
+        "Bold",
+      ];
       const GUEST_NOUNS = [
-        "Panda", "Tiger", "Eagle", "Wolf", "Fox", "Bear", "Lion", "Shark", "Hawk", "Owl"
-      ]
-      const randomAdjective = GUEST_ADJECTIVES[Math.floor(Math.random() * GUEST_ADJECTIVES.length)]
-      const randomNoun = GUEST_NOUNS[Math.floor(Math.random() * GUEST_NOUNS.length)]
-      const randomNumber = Math.floor(Math.random() * 9999) + 1
-      const newUsername = `${randomAdjective}${randomNoun}${randomNumber}`
-      
-      console.log("🔄 Creating new guest session with username:", newUsername)
-      
+        "Panda",
+        "Tiger",
+        "Eagle",
+        "Wolf",
+        "Fox",
+        "Bear",
+        "Lion",
+        "Shark",
+        "Hawk",
+        "Owl",
+      ];
+      const randomAdjective =
+        GUEST_ADJECTIVES[Math.floor(Math.random() * GUEST_ADJECTIVES.length)];
+      const randomNoun =
+        GUEST_NOUNS[Math.floor(Math.random() * GUEST_NOUNS.length)];
+      const randomNumber = Math.floor(Math.random() * 9999) + 1;
+      const newUsername = `${randomAdjective}${randomNoun}${randomNumber}`;
+
+      console.log("🔄 Creating new guest session with username:", newUsername);
+
       // Create new guest session
-      const response = await guestAPI.createSession({ username: newUsername })
-      
+      const response = await guestAPI.createSession({ username: newUsername });
+
       if (response.data.success && response.data.data.token) {
         // Store new token
-        sessionStorage.setItem("guestAuthToken", response.data.data.token)
-        
+        sessionStorage.setItem("guestAuthToken", response.data.data.token);
+
         // Store new guest user data
         const newGuestUser = {
           id: response.data.data.user.id,
@@ -336,34 +404,70 @@ class SocketService {
           lastSeen: new Date().toISOString(),
           deviceId: deviceId || "",
           isSearching: false,
-          connectedUser: null
-        }
-        sessionStorage.setItem("guest_user_session", JSON.stringify(newGuestUser))
-        
-        console.log("✅ New guest session created:", newGuestUser.username)
-        
+          connectedUser: null,
+        };
+        sessionStorage.setItem(
+          "guest_user_session",
+          JSON.stringify(newGuestUser)
+        );
+
+        console.log("✅ New guest session created:", newGuestUser.username);
+
         // Update current user
         this.currentUser = {
           id: newGuestUser.id,
           username: newGuestUser.username,
           deviceId: newGuestUser.deviceId,
-          isGuest: true
-        }
-        
+          isGuest: true,
+        };
+
+        // Notify listeners of successful regeneration
+        this.notifySessionRegenerated(newGuestUser);
+
         // Reconnect with new token
-        console.log("🔌 Reconnecting with new token...")
-        this.disconnect()
-        this.connect(this.currentUser)
+        console.log("🔌 Reconnecting with new token...");
+        this.disconnect();
+
+        // Small delay to ensure clean disconnect
+        setTimeout(() => {
+          this.connect(this.currentUser);
+        }, 100);
       } else {
-        console.error("❌ Failed to create new guest session")
+        console.error("❌ Failed to create new guest session");
+        // Redirect to home page for manual recreation
+        if (typeof window !== "undefined") {
+          window.location.href = "/";
+        }
       }
     } catch (error) {
-      console.error("❌ Error during token regeneration:", error)
+      console.error("❌ Error during token regeneration:", error);
+      // Redirect to home page for manual recreation
+      if (typeof window !== "undefined") {
+        window.location.href = "/";
+      }
     } finally {
-      this.isRegeneratingToken = false
+      this.isRegeneratingToken = false;
+    }
+  }
+
+  // Notify listeners that session has expired
+  private notifySessionExpired(): void {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("guest:session:expired"));
+    }
+  }
+
+  // Notify listeners of successful session regeneration
+  private notifySessionRegenerated(newUser: any): void {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(
+        new CustomEvent("guest:session:regenerated", {
+          detail: { user: newUser },
+        })
+      );
     }
   }
 }
 
-const socketService = new SocketService()
-export default socketService
+const socketService = new SocketService();
+export default socketService;
