@@ -184,7 +184,6 @@ body.chat-view {
   body.chat-view {
     position: fixed;
     width: 100%;
-    height: 100vh;
     height: var(--viewport-height, 100vh);
     overflow: hidden;
     overscroll-behavior: none;
@@ -650,8 +649,7 @@ body.chat-view {
   }
 }
 
-//spacing
-
+/* spacing */
 /* WhatsApp-style message bubbles with proper text wrapping */
 .message-bubble {
   max-width: 85%; /* WhatsApp uses ~85% of screen width */

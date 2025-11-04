@@ -147,74 +147,88 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
 
     return unsubscribe;
   }, []);
-  
+
   // Handle reconnection after wake from sleep or tab becoming visible
   useEffect(() => {
     if (!isVisible || !isGuestSession || !guestUser) return;
-    
+
     // If page was hidden for more than 10 seconds, might have missed disconnect events
     if (wasHiddenDuration > 10000) {
-      console.log(`🔄 Page visible after ${Math.round(wasHiddenDuration / 1000)}s - reconnecting...`);
-      
+      console.log(
+        `🔄 Page visible after ${Math.round(
+          wasHiddenDuration / 1000
+        )}s - reconnecting...`
+      );
+
       // If user was in a chat, clear it since the other user likely disconnected
       if (connectedUser) {
-        console.log('🧹 Clearing stale chat session after disconnect period');
+        console.log("🧹 Clearing stale chat session after disconnect period");
         setConnectedUser(null);
         clearChatHistory();
-        sessionStorage.removeItem('chat_connected_user');
-        
+        sessionStorage.removeItem("chat_connected_user");
+
         // Mark that we need to redirect
-        sessionStorage.setItem('was_disconnected', 'true');
+        sessionStorage.setItem("was_disconnected", "true");
       }
-      
+
       // Throttle reconnection attempts
       const now = Date.now();
       if (now - lastReconnectAttemptRef.current < 5000) {
-        console.log('⏳ Skipping reconnect - too soon after last attempt');
+        console.log("⏳ Skipping reconnect - too soon after last attempt");
         return;
       }
       lastReconnectAttemptRef.current = now;
-      
+
       // Clear any pending reconnection
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
-      
+
       // Check if we're actually disconnected
       if (!socketService.getConnectionStatus()) {
-        console.log('🔄 Attempting to reconnect socket...');
-        
+        console.log("🔄 Attempting to reconnect socket...");
+
         // Disconnect and reconnect cleanly
         socketService.disconnect();
-        
+
         // Small delay to ensure clean disconnect
         reconnectTimeoutRef.current = setTimeout(() => {
           connectSocket();
         }, 500);
       } else {
-        console.log('✅ Socket already connected');
+        console.log("✅ Socket already connected");
       }
     }
   }, [isVisible, wasHiddenDuration, isGuestSession, guestUser, connectedUser]);
-  
+
+  // Cleanup reconnection timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+        reconnectTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   // Handle network connectivity changes
   useEffect(() => {
     if (!isGuestSession || !guestUser) return;
-    
+
     const handleOnline = () => {
-      console.log('🌐 Network is back online');
-      
+      console.log("🌐 Network is back online");
+
       // Check if socket is disconnected
       if (!socketService.getConnectionStatus()) {
-        console.log('🔄 Reconnecting after network restoration...');
-        
+        console.log("🔄 Reconnecting after network restoration...");
+
         // Throttle reconnection
         const now = Date.now();
         if (now - lastReconnectAttemptRef.current < 3000) {
           return;
         }
         lastReconnectAttemptRef.current = now;
-        
+
         // Attempt to reconnect
         setTimeout(() => {
           socketService.disconnect();
@@ -222,24 +236,24 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
         }, 1000);
       }
     };
-    
+
     const handleOffline = () => {
-      console.log('📵 Network is offline');
+      console.log("📵 Network is offline");
       setIsConnected(false);
     };
-    
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-    
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
     // Check current network status on mount
-    if (typeof window !== 'undefined' && !navigator.onLine) {
-      console.log('📵 Starting in offline mode');
+    if (typeof window !== "undefined" && !navigator.onLine) {
+      console.log("📵 Starting in offline mode");
       setIsConnected(false);
     }
-    
+
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
     };
   }, [isGuestSession, guestUser]);
 
@@ -267,37 +281,37 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
 
   const setupSocketListeners = (): void => {
     // Remove all previous listeners to prevent duplicates
-    console.log('🧹 Cleaning up old socket listeners');
+    console.log("🧹 Cleaning up old socket listeners");
     const events = [
-      'connection:established',
-      'user:match:searching',
-      'user:matched',
-      'user:match:no_users',
-      'user:match:error',
-      'user:match:cancelled',
-      'chat:message',
-      'chat:message:sent',
-      'chat:message:delivered',
-      'chat:cleared',
-      'user:disconnected',
-      'room:closed',
-      'room:user_joined',
-      'room:user_left',
-      'chat:typing:start',
-      'chat:typing:stop',
-      'chat:error',
-      'presence:user_online',
-      'presence:user_offline',
-      'presence:searching_started',
-      'presence:searching_stopped',
-      'stats:update',
-      'users:online:update'
+      "connection:established",
+      "user:match:searching",
+      "user:matched",
+      "user:match:no_users",
+      "user:match:error",
+      "user:match:cancelled",
+      "chat:message",
+      "chat:message:sent",
+      "chat:message:delivered",
+      "chat:cleared",
+      "user:disconnected",
+      "room:closed",
+      "room:user_joined",
+      "room:user_left",
+      "chat:typing:start",
+      "chat:typing:stop",
+      "chat:error",
+      "presence:user_online",
+      "presence:user_offline",
+      "presence:searching_started",
+      "presence:searching_stopped",
+      "stats:update",
+      "users:online:update",
     ];
-    
-    events.forEach(event => socketService.off(event));
-    
-    console.log('✅ Old listeners removed, setting up new ones');
-    
+
+    events.forEach((event) => socketService.off(event));
+
+    console.log("✅ Old listeners removed, setting up new ones");
+
     // Note: Connection status is now handled via the socket service callback system
 
     // Custom connection established event (if backend sends it)
@@ -444,9 +458,9 @@ export const ChatProvider = ({ children }: { children: ReactNode }) => {
       // Clear chat state immediately
       setConnectedUser(null);
       clearChatHistory();
-      sessionStorage.removeItem('chat_connected_user');
-      sessionStorage.removeItem('was_disconnected');
-      
+      sessionStorage.removeItem("chat_connected_user");
+      sessionStorage.removeItem("was_disconnected");
+
       // Redirect to home after brief delay to show message
       setTimeout(() => {
         window.location.href = "/";
