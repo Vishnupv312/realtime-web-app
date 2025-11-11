@@ -10,7 +10,7 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout current repo
+      - name: Checkout current repo (source)
         uses: actions/checkout@v4
 
       - name: Generate GitHub App Token
@@ -19,24 +19,29 @@ jobs:
         with:
           app_id: ${{ secrets.CLIENT_APP_ID }}
           private_key: ${{ secrets.CLIENT_APP_PRIVATE_KEY }}
-          installation_id: ${{ secrets.CLIENT_APP_INSTALLATION_ID }}
           repository: cmmishracb/realtime-chat-app
 
-      - name: Checkout client repo
+      - name: Checkout client repo (target)
         uses: actions/checkout@v4
         with:
           repository: cmmishracb/realtime-chat-app
           token: ${{ steps.generate_token.outputs.token }}
           path: client
 
-      - name: Copy client repo files
+      - name: Copy source files into client checkout
+        # copy everything from source into the client checkout, excluding .git and the client folder itself
         run: |
-          rsync -av --exclude='.git' client/ ./client-copy/
+          rsync -av --delete \
+            --exclude='.git' \
+            --exclude='client' \
+            --exclude='.github/workflows' \
+            ./ ./client/
 
-      - name: Commit and push changes
+      - name: Commit and push changes to client repo
+        working-directory: client
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add .
-          git commit -m "Synced client repo" || echo "No changes to commit"
+          git commit -m "Synced client repo from Vishnupv312/realtime-web-app" || echo "No changes to commit"
           git push
