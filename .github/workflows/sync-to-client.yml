@@ -19,7 +19,6 @@ jobs:
         with:
           app_id: ${{ secrets.CLIENT_APP_ID }}
           private_key: ${{ secrets.CLIENT_APP_PRIVATE_KEY }}
-          installation_id: ${{ secrets.CLIENT_APP_INSTALLATION_ID }}
 
       - name: Checkout client repo
         uses: actions/checkout@v4
