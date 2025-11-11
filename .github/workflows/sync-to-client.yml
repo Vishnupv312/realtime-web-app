@@ -22,7 +22,7 @@ jobs:
           echo "INSTALLATION_ID: [${{ secrets.CLIENT_APP_INSTALLATION_ID }}]"
           echo "PRIVATE_KEY_PRESENT: [${{ secrets.CLIENT_APP_PRIVATE_KEY != '' }}]"
           # The line below is a security risk. Only enable it if you are desperate.
-          # echo "PRIVATE_KEY_SNIPPET: [${{ secrets.CLIENT_APP_PRIVATE_KEY | truncate 10 }}...]"
+          # echo "PRIVATE_KEY_SNIPPET: [${{ secrets.CLIENT_APP_PRIVATE_KEY }}...]"
 
       - name: Generate GitHub App Token
         id: generate_token
