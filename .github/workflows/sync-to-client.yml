@@ -13,24 +13,16 @@ jobs:
       - name: Checkout current repo (source)
         uses: actions/checkout@v4
 
-      # --- DEBUGGING STEP ---
-      # WARNING: This prints your secrets to the log.
-      # DELETE this step and the workflow log after testing.
-      - name: Debug Secrets
-        run: |
-          echo "APP_ID: [${{ secrets.CLIENT_APP_ID }}]"
-          echo "INSTALLATION_ID: [${{ secrets.CLIENT_APP_INSTALLATION_ID }}]"
-          echo "PRIVATE_KEY_PRESENT: [${{ secrets.CLIENT_APP_PRIVATE_KEY != '' }}]"
-          # The line below is a security risk. Only enable it if you are desperate.
-          # echo "PRIVATE_KEY_SNIPPET: [${{ secrets.CLIENT_APP_PRIVATE_KEY }}...]"
-
       - name: Generate GitHub App Token
         id: generate_token
-        uses: tibdex/github-app-token@v2
+        # Use the new, official action
+        uses: actions/create-github-app-token@v1
         with:
-          app_id: ${{ secrets.CLIENT_APP_ID }}
-          private_key: ${{ secrets.CLIENT_APP_PRIVATE_KEY }}
-          installation_id: ${{ secrets.CLIENT_APP_INSTALLATION_ID }} # Using the direct ID
+          app-id: ${{ secrets.CLIENT_APP_ID }}
+          private-key: ${{ secrets.CLIENT_APP_PRIVATE_KEY }}
+          # Specify the owner and repo of the *target* installation
+          owner: cmmishracb
+          repositories: realtime-chat-app
 
       - name: Checkout client repo (target)
         uses: actions/checkout@v4
@@ -40,7 +32,6 @@ jobs:
           path: client
 
       - name: Copy source files into client checkout
-        # copy everything from source into the client checkout, excluding .git and the client folder itself
         run: |
           rsync -av --delete \
             --exclude='.git' \
