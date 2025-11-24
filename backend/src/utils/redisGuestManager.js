@@ -1,6 +1,6 @@
-const redis = require('redis');
-const { v4: uuidv4 } = require('uuid');
-const { logger } = require('../config/logger');
+const redis = require("redis");
+const { v4: uuidv4 } = require("uuid");
+const { logger } = require("../config/logger");
 
 class RedisGuestManager {
   constructor() {
@@ -15,47 +15,54 @@ class RedisGuestManager {
         this.client = redis.createClient({
           url: process.env.REDIS_URL,
           socket: {
+            tls: process.env.REDIS_URL.startsWith("rediss://"), // True if using secure protocol
+            rejectUnauthorized: false, // Often needed for AWS self-signed certs
             reconnectDelay: 50,
             reconnectDelayMax: 500,
-            maxRetriesPerRequest: 3
+            maxRetriesPerRequest: 3,
           },
           retry_strategy: (options) => {
-            if (options.error && options.error.code === 'ECONNREFUSED') {
-              logger.warn('Redis connection refused, using fallback storage');
+            if (options.error && options.error.code === "ECONNREFUSED") {
+              logger.warn("Redis connection refused, using fallback storage");
               return undefined;
             }
             return Math.min(options.attempt * 100, 3000);
-          }
+          },
         });
 
-        this.client.on('error', (err) => {
-          logger.error('Redis client error:', err);
+        this.client.on("error", (err) => {
+          logger.error("Redis client error:", err);
           this.isConnected = false;
         });
 
-        this.client.on('connect', () => {
-          logger.info('Connected to Redis for guest management');
+        this.client.on("connect", () => {
+          logger.info("Connected to Redis for guest management");
           this.isConnected = true;
         });
 
-        this.client.on('ready', () => {
-          logger.info('Redis client ready for guest management');
+        this.client.on("ready", () => {
+          logger.info("Redis client ready for guest management");
           this.isConnected = true;
         });
 
-        this.client.on('end', () => {
-          logger.warn('Redis connection closed, falling back to in-memory storage');
+        this.client.on("end", () => {
+          logger.warn(
+            "Redis connection closed, falling back to in-memory storage"
+          );
           this.isConnected = false;
         });
 
         await this.client.connect();
-        logger.info('Redis Guest Manager initialized successfully');
+        logger.info("Redis Guest Manager initialized successfully");
       } catch (error) {
-        logger.warn('Failed to initialize Redis, using in-memory fallback:', error.message);
+        logger.warn(
+          "Failed to initialize Redis, using in-memory fallback:",
+          error.message
+        );
         this.isConnected = false;
       }
     } else {
-      logger.info('No REDIS_URL provided, using in-memory guest storage');
+      logger.info("No REDIS_URL provided, using in-memory guest storage");
     }
 
     // Start cleanup interval
@@ -65,16 +72,53 @@ class RedisGuestManager {
   // Generate random guest username
   generateGuestUsername() {
     const adjectives = [
-      'Cool', 'Happy', 'Smart', 'Brave', 'Kind', 'Quick', 'Bright', 'Calm', 'Swift', 'Bold',
-      'Wise', 'Nice', 'Fun', 'Wild', 'Free', 'Pure', 'Fast', 'True', 'Good', 'Fair'
+      "Cool",
+      "Happy",
+      "Smart",
+      "Brave",
+      "Kind",
+      "Quick",
+      "Bright",
+      "Calm",
+      "Swift",
+      "Bold",
+      "Wise",
+      "Nice",
+      "Fun",
+      "Wild",
+      "Free",
+      "Pure",
+      "Fast",
+      "True",
+      "Good",
+      "Fair",
     ];
 
     const nouns = [
-      'Panda', 'Tiger', 'Eagle', 'Wolf', 'Fox', 'Bear', 'Lion', 'Shark', 'Hawk', 'Owl',
-      'Cat', 'Dog', 'Bird', 'Fish', 'Deer', 'Frog', 'Duck', 'Bee', 'Star', 'Moon'
+      "Panda",
+      "Tiger",
+      "Eagle",
+      "Wolf",
+      "Fox",
+      "Bear",
+      "Lion",
+      "Shark",
+      "Hawk",
+      "Owl",
+      "Cat",
+      "Dog",
+      "Bird",
+      "Fish",
+      "Deer",
+      "Frog",
+      "Duck",
+      "Bee",
+      "Star",
+      "Moon",
     ];
 
-    const randomAdjective = adjectives[Math.floor(Math.random() * adjectives.length)];
+    const randomAdjective =
+      adjectives[Math.floor(Math.random() * adjectives.length)];
     const randomNoun = nouns[Math.floor(Math.random() * nouns.length)];
     const randomNumber = Math.floor(Math.random() * 9999) + 1;
     return `${randomAdjective}${randomNoun}${randomNumber}`;
@@ -84,8 +128,11 @@ class RedisGuestManager {
   async createGuestSession(username = null) {
     const sessionId = uuidv4();
     const guestId = `guest_${uuidv4()}`;
-    const guestUsername = username && username.trim() ? username.trim() : this.generateGuestUsername();
-    
+    const guestUsername =
+      username && username.trim()
+        ? username.trim()
+        : this.generateGuestUsername();
+
     const guestSession = {
       id: guestId,
       sessionId,
@@ -100,7 +147,7 @@ class RedisGuestManager {
       gender: null,
       language: null,
       createdAt: new Date().toISOString(),
-      connectedAt: null
+      connectedAt: null,
     };
 
     const key = `guest:${sessionId}`;
@@ -108,24 +155,34 @@ class RedisGuestManager {
 
     if (this.isConnected && this.client) {
       try {
-        await this.client.setEx(key, expirySeconds, JSON.stringify(guestSession));
-        logger.info(`Guest session created in Redis: ${guestUsername} (${sessionId})`);
+        await this.client.setEx(
+          key,
+          expirySeconds,
+          JSON.stringify(guestSession)
+        );
+        logger.info(
+          `Guest session created in Redis: ${guestUsername} (${sessionId})`
+        );
       } catch (error) {
-        logger.error('Redis setEx error:', error);
+        logger.error("Redis setEx error:", error);
         // Fallback to in-memory
         this.fallbackStorage.set(sessionId, {
           ...guestSession,
-          expiresAt: new Date(Date.now() + expirySeconds * 1000)
+          expiresAt: new Date(Date.now() + expirySeconds * 1000),
         });
-        logger.info(`Guest session created in fallback storage: ${guestUsername} (${sessionId})`);
+        logger.info(
+          `Guest session created in fallback storage: ${guestUsername} (${sessionId})`
+        );
       }
     } else {
       // Use fallback storage
       this.fallbackStorage.set(sessionId, {
         ...guestSession,
-        expiresAt: new Date(Date.now() + expirySeconds * 1000)
+        expiresAt: new Date(Date.now() + expirySeconds * 1000),
       });
-      logger.info(`Guest session created in fallback storage: ${guestUsername} (${sessionId})`);
+      logger.info(
+        `Guest session created in fallback storage: ${guestUsername} (${sessionId})`
+      );
     }
 
     return guestSession;
@@ -142,7 +199,7 @@ class RedisGuestManager {
           return JSON.parse(data);
         }
       } catch (error) {
-        logger.error('Redis get error:', error);
+        logger.error("Redis get error:", error);
         // Fall through to fallback
       }
     }
@@ -166,7 +223,7 @@ class RedisGuestManager {
     const updatedSession = {
       ...guestSession,
       ...updates,
-      lastSeen: new Date().toISOString()
+      lastSeen: new Date().toISOString(),
     };
 
     const key = `guest:${sessionId}`;
@@ -174,9 +231,13 @@ class RedisGuestManager {
 
     if (this.isConnected && this.client) {
       try {
-        await this.client.setEx(key, expirySeconds, JSON.stringify(updatedSession));
+        await this.client.setEx(
+          key,
+          expirySeconds,
+          JSON.stringify(updatedSession)
+        );
       } catch (error) {
-        logger.error('Redis setEx error:', error);
+        logger.error("Redis setEx error:", error);
         // Update fallback storage
         const fallbackSession = this.fallbackStorage.get(sessionId);
         if (fallbackSession) {
@@ -204,7 +265,7 @@ class RedisGuestManager {
 
     if (this.isConnected && this.client) {
       try {
-        const keys = await this.client.keys('guest:*');
+        const keys = await this.client.keys("guest:*");
         for (const key of keys) {
           const data = await this.client.get(key);
           if (data) {
@@ -220,13 +281,13 @@ class RedisGuestManager {
                 connectedUser: guest.connectedUser,
                 location: guest.location,
                 gender: guest.gender,
-                language: guest.language
+                language: guest.language,
               });
             }
           }
         }
       } catch (error) {
-        logger.error('Redis keys/get error:', error);
+        logger.error("Redis keys/get error:", error);
         // Fall through to fallback
       }
     }
@@ -236,7 +297,7 @@ class RedisGuestManager {
     for (const [sessionId, guest] of this.fallbackStorage.entries()) {
       if (guest.isOnline && guest.expiresAt > now) {
         // Avoid duplicates if Redis also returned this guest
-        const exists = onlineGuests.find(g => g.sessionId === sessionId);
+        const exists = onlineGuests.find((g) => g.sessionId === sessionId);
         if (!exists) {
           onlineGuests.push({
             id: guest.id,
@@ -248,7 +309,7 @@ class RedisGuestManager {
             connectedUser: guest.connectedUser,
             location: guest.location,
             gender: guest.gender,
-            language: guest.language
+            language: guest.language,
           });
         }
       }
@@ -266,7 +327,7 @@ class RedisGuestManager {
 
     if (this.isConnected && this.client) {
       try {
-        const keys = await this.client.keys('guest:*');
+        const keys = await this.client.keys("guest:*");
         for (const key of keys) {
           const data = await this.client.get(key);
           if (data) {
@@ -284,7 +345,7 @@ class RedisGuestManager {
           }
         }
       } catch (error) {
-        logger.error('Redis stats error:', error);
+        logger.error("Redis stats error:", error);
         // Fall through to fallback
       }
     }
@@ -310,7 +371,7 @@ class RedisGuestManager {
       totalUsers: totalGuests,
       onlineUsers: onlineGuests,
       availableUsers: searchingGuests,
-      connectedUsers: connectedGuests / 2 // Divide by 2 since each connection involves 2 users
+      connectedUsers: connectedGuests / 2, // Divide by 2 since each connection involves 2 users
     };
   }
 
@@ -322,7 +383,7 @@ class RedisGuestManager {
       try {
         await this.client.del(key);
       } catch (error) {
-        logger.error('Redis del error:', error);
+        logger.error("Redis del error:", error);
       }
     }
 
@@ -332,55 +393,55 @@ class RedisGuestManager {
 
   // Increment active user count
   async incrementActiveUserCount() {
-    const key = 'active_user_count';
-    
+    const key = "active_user_count";
+
     if (this.isConnected && this.client) {
       try {
         const count = await this.client.incr(key);
         await this.client.expire(key, 300); // Expire after 5 minutes of inactivity
         return count;
       } catch (error) {
-        logger.error('Redis incr error:', error);
+        logger.error("Redis incr error:", error);
       }
     }
-    
+
     return null;
   }
 
   // Decrement active user count
   async decrementActiveUserCount() {
-    const key = 'active_user_count';
-    
+    const key = "active_user_count";
+
     if (this.isConnected && this.client) {
       try {
         const count = await this.client.decr(key);
         // Don't let it go below 0
         if (count < 0) {
-          await this.client.set(key, '0');
+          await this.client.set(key, "0");
           return 0;
         }
         return count;
       } catch (error) {
-        logger.error('Redis decr error:', error);
+        logger.error("Redis decr error:", error);
       }
     }
-    
+
     return null;
   }
 
   // Get current active user count
   async getActiveUserCount() {
-    const key = 'active_user_count';
-    
+    const key = "active_user_count";
+
     if (this.isConnected && this.client) {
       try {
         const count = await this.client.get(key);
-        return parseInt(count || '0', 10);
+        return parseInt(count || "0", 10);
       } catch (error) {
-        logger.error('Redis get error:', error);
+        logger.error("Redis get error:", error);
       }
     }
-    
+
     return 0;
   }
 
@@ -397,7 +458,9 @@ class RedisGuestManager {
     }
 
     if (cleanedCount > 0) {
-      logger.info(`Cleaned ${cleanedCount} expired guest sessions from fallback storage`);
+      logger.info(
+        `Cleaned ${cleanedCount} expired guest sessions from fallback storage`
+      );
     }
 
     return cleanedCount;
@@ -410,7 +473,7 @@ class RedisGuestManager {
       this.cleanupExpiredSessions();
     }, 10 * 60 * 1000);
 
-    logger.info('Guest session cleanup interval started');
+    logger.info("Guest session cleanup interval started");
   }
 
   // Graceful shutdown
@@ -418,9 +481,9 @@ class RedisGuestManager {
     if (this.client && this.isConnected) {
       try {
         await this.client.quit();
-        logger.info('Redis Guest Manager connection closed');
+        logger.info("Redis Guest Manager connection closed");
       } catch (error) {
-        logger.error('Error closing Redis connection:', error);
+        logger.error("Error closing Redis connection:", error);
       }
     }
   }
